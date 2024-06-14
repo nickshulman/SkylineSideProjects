@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using CommandLine.Text;
 
 namespace LibraryDotProduct
 {
@@ -6,33 +7,28 @@ namespace LibraryDotProduct
     {
         class Options
         {
-            [Option(Default = .1)]
+            [Option(Default = .1, HelpText = "m/z tolerance to use when performing dot product between spectra")]
+            
             public double MzTolerance { get; set; }
-            [Value(0, Required = true, MetaName = "Library1")]
-            public string File1 { get; set; }
-            [Value(1, Required = true, MetaName = "Library2")]
-            public string File2 { get; set; }
+            [Value(0, Required = true, MetaName = "Primary Library File", HelpText = "Library file (.blib or .midas) containing spectra to be compared against")]
+            public string Library1 { get; set; }
+
+            [Value(1, Required = true, MetaName = "Second Library File", HelpText = "Library file (.blib or .midas) containing spectra to compare")]
+            public string Library2 { get; set; }
         }
         static void Main(string[] args)
         {
-            Parser.Default.ParseArguments<Options>(args)
+            var parsedArguments = Parser.Default.ParseArguments<Options>(args);
+            parsedArguments
                 .WithParsed(Run)
-                .WithNotParsed(
-                    errors =>
-                    {
-                        foreach (var error in errors)
-                        {
-                            Console.Error.Write(error);
-                        }
-
-                    });
+                .WithNotParsed(errors => HandleParseError(errors, parsedArguments));
         }
 
         private static void Run(Options options)
         {
             Console.Out.WriteLine("Peptide\tCharge\tFile1\tRetentionTime1\tFile2\tRetentionTime2\tDotProduct");
-            var file1 = options.File1;
-            var file2 = options.File2;
+            var file1 = options.Library1;
+            var file2 = options.Library2;
             var library1 = Library.ReadLibrary(file1);
             var library2 = Library.ReadLibrary(file2);
             var entryLookup = library2.Entries.ToLookup(entry => entry.Key);
@@ -67,6 +63,28 @@ namespace LibraryDotProduct
             var dotProduct = sumCross / Math.Sqrt(intensities1.Sum(i => i * i) * matchedIntensities.Sum(i => i * i));
             dotProduct = Math.Min(1, dotProduct);
             return 1 - Math.Acos(dotProduct) * 2 / Math.PI;
+        }
+
+        static void HandleParseError(IEnumerable<Error> errors, ParserResult<Options> result)
+        {
+            var helpText = HelpText.AutoBuild(result, h =>
+            {
+                h.AddPreOptionsLine("Calculates the dot product between spectra in two different libraries (.blib or .midas)");
+                h.AddPreOptionsLine(
+                    "The dot product calculation will use the m/z values from the first library which have a non-zero intensity.");
+                h.AddPreOptionsLine(
+                    "This results in slightly different dot product values compared to Skyline which uses the m/z values of all predicted fragment ions.");
+                return h;
+            }, e=>e);
+            Console.WriteLine(helpText);
+            foreach (var e in errors)
+            {
+                if (e is HelpRequestedError || e is VersionRequestedError)
+                {
+                    continue;
+                }
+                Console.WriteLine($"Error: {e}");
+            }
         }
     }
 }
