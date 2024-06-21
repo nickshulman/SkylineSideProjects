@@ -9,10 +9,11 @@ namespace ResourcesOrganizer
         static int Main(string[] args)
         {
             Console.WriteLine("Hello, World!");
-            return Parser.Default.ParseArguments<ImportOptions, ExportNew>(args)
-                .MapResult<ImportOptions, ExportNew, int>(
-                    DoImport, 
-                    DoExportNew, 
+            return Parser.Default.ParseArguments<AddOptions, SubtractOptions, IntersectOptions>(args)
+                .MapResult<AddOptions, SubtractOptions, IntersectOptions, int>(
+                    DoAdd, 
+                    DoSubtract,
+                    DoIntersect,
                     HandleParseError);
         }
 
@@ -30,19 +31,41 @@ namespace ResourcesOrganizer
             return 1;
         }
 
-        static int DoImport(ImportOptions options)
+        static int DoAdd(AddOptions options)
         {
             var database = GetDatabase(options);
-
-            var tempFile = Path.GetTempFileName();
-            database.Save(tempFile);
-            File.Replace(tempFile, options.DbFile, null);
+            foreach (var file in options.Files)
+            {
+                var otherDb = ResourcesDatabase.ReadFile(file);
+                database.Add(otherDb);
+            }
+            database.SaveAtomic(options.DbFile);
             return 0;
         }
 
-        static int DoExportNew(ExportNew exportOptions)
+        static int DoSubtract(SubtractOptions options)
         {
-            var database = GetDatabase(exportOptions);
+            var database = GetDatabase(options);
+            foreach (var file in options.Files)
+            {
+                var otherDb = ResourcesDatabase.ReadFile(file);
+                database.Subtract(otherDb);
+            }
+            database.SaveAtomic(options.DbFile);
+            return 0;
+
+        }
+
+        static int DoIntersect(IntersectOptions options)
+        {
+            var database = GetDatabase(options);
+            var otherDb = new ResourcesDatabase();
+            foreach (var file in options.Files)
+            {
+                otherDb.Add(ResourcesDatabase.ReadFile(file));
+            }
+            database.Intersect(otherDb);
+            database.SaveAtomic(options.DbFile);
             return 0;
         }
 
@@ -52,7 +75,7 @@ namespace ResourcesOrganizer
             var database = new ResourcesDatabase();
             if (File.Exists(path))
             {
-                database.Read(path);
+                database.ReadDatabase(path);
             }
 
             return database;

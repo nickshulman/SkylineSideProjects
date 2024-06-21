@@ -1,53 +1,69 @@
 ﻿using NHibernate;
-using NHibernate.Context;
 using ResourcesOrganizer.DataModel;
 
 namespace ResourcesOrganizer.ResourcesModel
 {
     public class ResourcesDatabase
     {
-        private Dictionary<string, List<ResourcesFile>> _resourcesFiles = new Dictionary<string, List<ResourcesFile>>();
+        public Dictionary<string, ResourcesFile> ResourcesFiles { get; }= [];
 
-        public void AddResourcesFiles(string versionTag, IEnumerable<ResourcesFile> files)
+        public static ResourcesDatabase ReadFile(string path)
         {
-            _resourcesFiles.Add(versionTag, files.ToList());
+            var database = new ResourcesDatabase();
+            var extension = Path.GetExtension(path);
+            if (extension.Equals(".db", StringComparison.OrdinalIgnoreCase))
+            {
+                database.ReadDatabase(path);
+            }
+            else if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
+            {
+                var resourcesFile = ResourcesFile.Read(path);
+                database.ResourcesFiles.Add(path, resourcesFile);
+            }
+            else if (Directory.Exists(path))
+            {
+                database.AddFolder(path, path);
+            }
+            return database;
         }
 
-        public void Read(string databasePath)
+        public void ReadDatabase(string databasePath)
         {
             using var sessionFactory = SessionFactoryFactory.CreateSessionFactory(databasePath, false);
             using var session = sessionFactory.OpenStatelessSession();
 
-            Read(session);
+            ReadDatabase(session);
         }
 
-        public void Read(IStatelessSession session)
+        public void ReadDatabase(IStatelessSession session)
         {
             var invariantResources = session.Query<InvariantResource>()
                 .ToDictionary(resource => resource.Id!.Value, resource => resource.GetKey());
             var localizedResources = session.Query<LocalizedResource>()
                 .ToLookup(localizedResource => localizedResource.InvariantResourceId);
-            foreach (var versionTagGroup in session.Query<ResourceLocation>().GroupBy(location => location.VersionTag!))
+            foreach (var fileGroup in session.Query<ResourceLocation>().GroupBy(location => location.FilePath!))
             {
-                var files = new List<ResourcesFile>();
-                foreach (var fileGroup in versionTagGroup.GroupBy(location => location.FilePath!))
-                {
-                    var resourcesFile = new ResourcesFile(fileGroup.Key);
+                var resourcesFile = new ResourcesFile();
 
-                    foreach (var resourceLocation in fileGroup.OrderBy(loc => loc.SortIndex))
+                foreach (var resourceLocation in fileGroup.OrderBy(loc => loc.SortIndex))
+                {
+                    var entry = new ResourceEntry(resourceLocation.Name!,
+                        invariantResources[resourceLocation.InvariantResourceId]);
+                    foreach (var localizedResource in localizedResources[resourceLocation.InvariantResourceId])
                     {
-                        var entry = new ResourceEntry(resourceLocation.Name!,
-                            invariantResources[resourceLocation.InvariantResourceId]);
-                        foreach (var localizedResource in localizedResources[resourceLocation.InvariantResourceId])
-                        {
-                            entry.LocalizedValues.Add(localizedResource.Language!, localizedResource.Value!);
-                        }
-                        resourcesFile.Entries.Add(entry);
+                        entry.LocalizedValues.Add(localizedResource.Language!, localizedResource.Value!);
                     }
-                    files.Add(resourcesFile);
+                    resourcesFile.Entries.Add(entry);
                 }
-                _resourcesFiles.Add(versionTagGroup.Key, files);
+                ResourcesFiles.Add(fileGroup.Key, resourcesFile);
             }
+        }
+
+        public void SaveAtomic(string path)
+        {
+            var tempFile = Path.GetTempFileName();
+            Save(tempFile);
+            File.Replace(tempFile, path, null);
         }
 
         public void Save(string path)
@@ -57,12 +73,9 @@ namespace ResourcesOrganizer.ResourcesModel
             var transaction = session.BeginTransaction();
             var invariantResources = SaveInvariantResources(session);
             SaveLocalizedResources(session, invariantResources);
-            foreach (var entry in _resourcesFiles)
+            foreach (var resourceFile in ResourcesFiles)
             {
-                foreach (var resourceFile in entry.Value)
-                {
-                    SaveResourcesFile(session, invariantResources, entry.Key, resourceFile);
-                }
+                SaveResourcesFile(session, invariantResources, resourceFile.Key, resourceFile.Value);
             }
             transaction.Commit();
         }
@@ -89,7 +102,7 @@ namespace ResourcesOrganizer.ResourcesModel
         private void SaveLocalizedResources(IStatelessSession session,
             IDictionary<InvariantResourceKey, long> invariantResources)
         {
-            foreach (var entryGroup in _resourcesFiles.Values.SelectMany(list => list)
+            foreach (var entryGroup in ResourcesFiles.Values
                          .SelectMany(resources => resources.Entries)
                          .GroupBy(entry => entry.Invariant))
             {
@@ -113,10 +126,9 @@ namespace ResourcesOrganizer.ResourcesModel
             }
         }
 
-        private void SaveResourcesFile(IStatelessSession session, Dictionary<InvariantResourceKey, long> invariantResources, string versionTag, ResourcesFile resourcesFile)
+        private void SaveResourcesFile(IStatelessSession session, Dictionary<InvariantResourceKey, long> invariantResources, string filePath, ResourcesFile resourcesFile)
         {
             int sortIndex = 0;
-            var filePath = resourcesFile.RelativePath.ToString();
             foreach (var entry in resourcesFile.Entries)
             {
                 var resourceLocation = new ResourceLocation
@@ -125,7 +137,6 @@ namespace ResourcesOrganizer.ResourcesModel
                     InvariantResourceId = invariantResources[entry.Invariant],
                     Name = entry.Name,
                     SortIndex = ++sortIndex,
-                    VersionTag = versionTag
                 };
                 session.Insert(resourceLocation);
             }
@@ -133,10 +144,79 @@ namespace ResourcesOrganizer.ResourcesModel
 
         public List<InvariantResourceKey> GetInvariantResources()
         {
-            var invariantResources = _resourcesFiles.Values.SelectMany(list => list)
+            var invariantResources = ResourcesFiles.Values
                 .SelectMany(resources => resources.Entries.Select(entry => entry.Invariant)).ToList();
             invariantResources.Sort();
             return invariantResources;
+        }
+
+        public void Add(ResourcesDatabase database)
+        {
+            foreach (var resourcesFile in database.ResourcesFiles)
+            {
+                if (ResourcesFiles.TryGetValue(resourcesFile.Key, out var existing))
+                {
+                    existing.Add(resourcesFile.Value);
+                }
+                else
+                {
+                    ResourcesFiles.Add(resourcesFile.Key, resourcesFile.Value.Clone());
+                }
+            }
+        }
+
+        public void Subtract(ResourcesDatabase database)
+        {
+            foreach (var resourcesFile in database.ResourcesFiles.ToList())
+            {
+                if (!ResourcesFiles.TryGetValue(resourcesFile.Key, out var existing))
+                {
+                    continue;
+                }
+
+                existing.Subtract(resourcesFile.Value);
+                if (existing.Entries.Count == 0)
+                {
+                    database.ResourcesFiles.Remove(resourcesFile.Key);
+                }
+            }
+        }
+
+        public void Intersect(ResourcesDatabase database)
+        {
+            foreach (var entry in ResourcesFiles.ToList())
+            {
+                if (!database.ResourcesFiles.TryGetValue(entry.Key, out var other))
+                {
+                    ResourcesFiles.Remove(entry.Key);
+                    continue;
+                }
+                entry.Value.Intersect(other);
+                if (entry.Value.Entries.Count == 0)
+                {
+                    ResourcesFiles.Remove(entry.Key);
+                }
+            }
+        }
+
+        public void AddFolder(string fullPath, string relativePath)
+        {
+            var directoryInfo = new DirectoryInfo(fullPath);
+            foreach (var file in directoryInfo.GetFiles())
+            {
+                if (!ResourcesFile.IsInvariantResourceFile(file.FullName))
+                {
+                    continue;
+                }
+
+                var resourcesFile = ResourcesFile.Read(file.FullName);
+                ResourcesFiles[Path.Combine(relativePath, file.Name)] = resourcesFile;
+            }
+
+            foreach (var folder in directoryInfo.GetDirectories())
+            {
+                AddFolder(folder.FullName, Path.Combine(relativePath, folder.Name));
+            }
         }
     }
 }

@@ -13,7 +13,5 @@ namespace ResourcesOrganizer.DataModel
         public int SortIndex { get; set; }
         [Property]
         public string? Name { get; set; }
-        [Property]
-        public string? VersionTag { get; set; }
     }
 }

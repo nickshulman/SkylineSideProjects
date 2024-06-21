@@ -4,24 +4,25 @@ namespace ResourcesOrganizer
 {
     public class Options
     {
-        [Option("dbfile", Default = "resources.db")]
+        [Option("db", Default = "resources.db")]
         public string DbFile { get; set; }
+
+        [Value(0, MetaName = "files", Required = true)]
+        public IEnumerable<string> Files { get; set; }
     }
 
-    [Verb("import")]
-    public class ImportOptions : Options
+    [Verb("add")]
+    public class AddOptions : Options
     {
-        [Option("tag", Required = true)]
-        public string Tag { get; set; }
     }
 
-    [Verb("exportnew")]
-    public class ExportNew : Options
+    [Verb("subtract")]
+    public class SubtractOptions : Options
     {
-        [Option("oldtag", Required = true)]
-        public string OldTag { get; set; }
+    }
 
-        [Option("newtag", Required= true )]
-        public string NewTag { get; set; }
+    [Verb("intersect")]
+    public class IntersectOptions : Options
+    {
     }
 }
