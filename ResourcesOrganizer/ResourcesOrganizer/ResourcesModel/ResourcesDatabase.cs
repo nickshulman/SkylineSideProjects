@@ -203,31 +203,25 @@ namespace ResourcesOrganizer.ResourcesModel
 
         public void Subtract(ResourcesDatabase database)
         {
-            foreach (var resourcesFile in database.ResourcesFiles.ToList())
+            var keysToRemove = database.ResourcesFiles.Values
+                .SelectMany(file => file.Entries.Select(entry => entry.Invariant)).ToHashSet();
+            foreach (var entry in ResourcesFiles.ToList())
             {
-                if (!ResourcesFiles.TryGetValue(resourcesFile.Key, out var existing))
+                entry.Value.Subtract(keysToRemove);
+                if (entry.Value.Entries.Count == 0)
                 {
-                    continue;
-                }
-
-                existing.Subtract(resourcesFile.Value);
-                if (existing.Entries.Count == 0)
-                {
-                    database.ResourcesFiles.Remove(resourcesFile.Key);
+                    ResourcesFiles.Remove(entry.Key);
                 }
             }
         }
 
         public void Intersect(ResourcesDatabase database)
         {
+            var keysToKeep = database.ResourcesFiles.Values
+                .SelectMany(file => file.Entries.Select(entry => entry.Invariant)).ToHashSet();
             foreach (var entry in ResourcesFiles.ToList())
             {
-                if (!database.ResourcesFiles.TryGetValue(entry.Key, out var other))
-                {
-                    ResourcesFiles.Remove(entry.Key);
-                    continue;
-                }
-                entry.Value.Intersect(other);
+                entry.Value.Intersect(keysToKeep);
                 if (entry.Value.Entries.Count == 0)
                 {
                     ResourcesFiles.Remove(entry.Key);

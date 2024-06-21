@@ -115,28 +115,14 @@ namespace ResourcesOrganizer.ResourcesModel
             }
         }
 
-        public void Subtract(ResourcesFile resourcesFile)
+        public void Subtract(HashSet<InvariantResourceKey> keysToRemove)
         {
-            var keys = resourcesFile.Entries.Select(entry => entry.Invariant).ToHashSet();
-            for (int i = Entries.Count - 1; i >= 0; i--)
-            {
-                if (keys.Contains(Entries[i].Invariant))
-                {
-                    Entries.RemoveAt(i);
-                }
-            }
+            Entries = [..Entries.Where(entry => !keysToRemove.Contains(entry.Invariant))];
         }
 
-        public void Intersect(ResourcesFile resourcesFile)
+        public void Intersect(HashSet<InvariantResourceKey> keysToKeep)
         {
-            var keys = resourcesFile.Entries.Select(entry => entry.Invariant).ToHashSet();
-            for (int i = Entries.Count - 1; i >= 0; i--)
-            {
-                if (!keys.Contains(Entries[i].Invariant))
-                {
-                    Entries.RemoveAt(i);
-                }
-            }
+            Entries = [..Entries.Where(entry => keysToKeep.Contains(entry.Invariant))];
         }
 
         public ResourceEntry? FindEntry(string name)
