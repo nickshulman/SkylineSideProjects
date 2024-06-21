@@ -10,9 +10,9 @@ using NHibernate.Mapping.Attributes;
 
 namespace ResourcesOrganizer.DataModel
 {
-    public class SessionFactoryFactory
+    public static class SessionFactoryFactory
     {
-        public ISessionFactory CreateSessionFactory(string filePath, bool createSchema)
+        public static ISessionFactory CreateSessionFactory(string filePath, bool createSchema)
         {
             var connectionString = new SqliteConnectionStringBuilder
             {

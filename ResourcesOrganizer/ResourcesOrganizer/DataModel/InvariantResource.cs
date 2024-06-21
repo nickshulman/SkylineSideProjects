@@ -13,5 +13,16 @@ namespace ResourcesOrganizer.DataModel
         public string? Value { get; set; }
         [Property]
         public string? Comment { get; set; }
+
+        public ResourcesModel.InvariantResourceKey GetKey()
+        {
+            return new ResourcesModel.InvariantResourceKey
+            {
+                Name = Name,
+                Type = Type,
+                Value = Value,
+                Comment = Comment
+            };
+        }
     }
 }

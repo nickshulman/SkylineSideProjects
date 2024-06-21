@@ -10,6 +10,24 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="ResourcesFileTest\Resources.ja.resx.testfile" />
+    <None Remove="ResourcesFileTest\Resources.resx.testfile" />
+    <None Remove="ResourcesFileTest\Resources.zh-CHS.resx.testfile" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="ResourcesFileTest\Resources.ja.resx.testfile">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ResourcesFileTest\Resources.resx.testfile">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ResourcesFileTest\Resources.zh-CHS.resx.testfile">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="MSTest.TestAdapter" Version="3.1.1" />
