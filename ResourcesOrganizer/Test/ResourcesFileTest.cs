@@ -27,6 +27,7 @@ namespace Test
             resourcesDatabase.Save(dbPath);
             var compare = new ResourcesDatabase();
             compare.Read(dbPath);
+            
             CollectionAssert.AreEqual(resourcesDatabase.GetInvariantResources(), compare.GetInvariantResources());
         }
     }

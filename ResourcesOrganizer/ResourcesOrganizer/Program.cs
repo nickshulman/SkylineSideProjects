@@ -1,20 +1,22 @@
-﻿using CommandLine.Text;
+﻿using System.Runtime.Serialization;
 using CommandLine;
-using NHibernate.Mapping.ByCode;
+using ResourcesOrganizer.ResourcesModel;
 
 namespace ResourcesOrganizer
 {
     internal class Program
     {
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
             Console.WriteLine("Hello, World!");
-            Parser.Default.ParseArguments<ImportOptions>(args)
-                .WithParsed(DoImport)
-                .WithNotParsed(HandleParseError);
+            return Parser.Default.ParseArguments<ImportOptions, ExportNew>(args)
+                .MapResult<ImportOptions, ExportNew, int>(
+                    DoImport, 
+                    DoExportNew, 
+                    HandleParseError);
         }
 
-        static void HandleParseError(IEnumerable<Error> errors)
+        static int HandleParseError(IEnumerable<Error> errors)
         {
             foreach (var e in errors)
             {
@@ -24,11 +26,36 @@ namespace ResourcesOrganizer
                 }
                 Console.WriteLine($"Error: {e}");
             }
+
+            return 1;
         }
 
-        static void DoImport(ImportOptions options)
+        static int DoImport(ImportOptions options)
         {
+            var database = GetDatabase(options);
 
+            var tempFile = Path.GetTempFileName();
+            database.Save(tempFile);
+            File.Replace(tempFile, options.DbFile, null);
+            return 0;
+        }
+
+        static int DoExportNew(ExportNew exportOptions)
+        {
+            var database = GetDatabase(exportOptions);
+            return 0;
+        }
+
+        private static ResourcesDatabase GetDatabase(Options options)
+        {
+            var path = options.DbFile;
+            var database = new ResourcesDatabase();
+            if (File.Exists(path))
+            {
+                database.Read(path);
+            }
+
+            return database;
         }
     }
 }

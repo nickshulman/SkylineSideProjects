@@ -27,16 +27,7 @@ namespace ResourcesOrganizer.DataModel
             {
                 Validate = true
             };
-            MemoryStream memoryStream = new MemoryStream();
-            {
-                using var stream = hbmSerializer.Serialize(typeof(Entity).Assembly);
-                stream.CopyTo(memoryStream);
-            }
-            memoryStream.Seek(0, SeekOrigin.Begin);
-            var text = new StreamReader(memoryStream).ReadToEnd();
-            Console.Out.WriteLine("Configuration: {0}", text);
-            memoryStream.Seek(0, SeekOrigin.Begin);
-            cfg.AddInputStream(memoryStream);
+            cfg.AddInputStream(hbmSerializer.Serialize(typeof(Entity).Assembly));
             if (createSchema)
             {
                 cfg.SetProperty(@"hbm2ddl.auto", @"create");

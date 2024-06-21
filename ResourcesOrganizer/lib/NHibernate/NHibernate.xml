@@ -700,52 +700,6 @@
             </summary>
             <seealso cref="M:System.Data.IDataRecord.GetOrdinal(System.String)"/>
         </member>
-        <member name="T:NHibernate.AdoNet.SqlClientSqlCommandSet">
-            <summary>
-            Expose the batch functionality in ADO.Net 4.0
-            Microsoft in its wisdom decided to make my life hard and mark it internal.
-            Through the use of Reflection and some delegates magic, I opened up the functionality.
-            
-            Observable performance benefits are 50%+ when used, so it is really worth it.
-            </summary>
-        </member>
-        <member name="M:NHibernate.AdoNet.SqlClientSqlCommandSet.Append(System.Data.SqlClient.SqlCommand)">
-            <summary>
-            Append a command to the batch
-            </summary>
-            <param name="command"></param>
-        </member>
-        <member name="M:NHibernate.AdoNet.SqlClientSqlCommandSet.AssertHasParameters(System.Data.SqlClient.SqlCommand)">
-            <summary>
-            This is required because SqlClient.SqlCommandSet will throw if 
-            the command has no parameters.
-            </summary>
-            <param name="command"></param>
-        </member>
-        <member name="P:NHibernate.AdoNet.SqlClientSqlCommandSet.BatchCommand">
-            <summary>
-            Return the batch command to be executed
-            </summary>
-        </member>
-        <member name="P:NHibernate.AdoNet.SqlClientSqlCommandSet.CountOfCommands">
-            <summary>
-            The number of commands batched in this instance
-            </summary>
-        </member>
-        <member name="M:NHibernate.AdoNet.SqlClientSqlCommandSet.ExecuteNonQuery">
-            <summary>
-            Executes the batch
-            </summary>
-            <returns>
-            This seems to be returning the total number of affected rows in all queries
-            </returns>
-        </member>
-        <member name="M:NHibernate.AdoNet.SqlClientSqlCommandSet.Dispose">
-            <summary>
-            Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
-            </summary>
-            <filterpriority>2</filterpriority>
-        </member>
         <member name="M:NHibernate.AdoNet.Util.DdlFormatter.Format(System.String)">
             <summary> Format an SQL statement using simple rules:
             a) Insert newline after each comma;
@@ -4666,7 +4620,7 @@
         <member name="T:NHibernate.Context.CallSessionContext">
             <summary>
             Provides a <see cref="M:NHibernate.ISessionFactory.GetCurrentSession">current session</see>
-            for each <see cref="T:System.Runtime.Remoting.Messaging.CallContext"/>.
+            for each <see cref="!:System.Runtime.Remoting.Messaging.CallContext"/>.
             Uses <see cref="T:System.Threading.AsyncLocal`1"/> instead if run under .NET Core/.NET Standard.
             <remarks>
             <para>Not recommended for .NET 2.0 web applications.</para>
@@ -4805,8 +4759,9 @@
         </member>
         <member name="T:NHibernate.Context.WcfOperationSessionContext">
             <summary>
-            Provides a <see cref="M:NHibernate.ISessionFactory.GetCurrentSession">current session</see>
-            for the current OperationContext in WCF. Works only during the lifetime of a WCF operation.
+            Obsolete class not usable with the current framework. Use the
+            .Net Framework distribution of NHibernate if you need it. See
+            https://github.com/nhibernate/nhibernate-core/issues/1842
             </summary>
         </member>
         <member name="T:NHibernate.Context.WebSessionContext">
@@ -13687,20 +13642,6 @@
         </member>
         <member name="F:NHibernate.Driver.SqlClientDriver.MaxSizeForXml">
             <remarks>http://stackoverflow.com/a/7264795/259946</remarks>
-        </member>
-        <member name="M:NHibernate.Driver.SqlClientDriver.CreateConnection">
-            <summary>
-            Creates an uninitialized <see cref="T:System.Data.Common.DbConnection" /> object for
-            the SqlClientDriver.
-            </summary>
-            <value>An unitialized <see cref="T:System.Data.SqlClient.SqlConnection"/> object.</value>
-        </member>
-        <member name="M:NHibernate.Driver.SqlClientDriver.CreateCommand">
-            <summary>
-            Creates an uninitialized <see cref="T:System.Data.Common.DbCommand" /> object for
-            the SqlClientDriver.
-            </summary>
-            <value>An unitialized <see cref="T:System.Data.SqlClient.SqlCommand"/> object.</value>
         </member>
         <member name="P:NHibernate.Driver.SqlClientDriver.UseNamedPrefixInSql">
             <summary>
@@ -58605,6 +58546,14 @@
             interface.
             </summary>
             <typeparam name="T">The type of the enumerated elements.</typeparam>
+        </member>
+        <member name="M:NHibernate.Util.ExpressionsHelper.TryGetDynamicMemberBinder(System.Linq.Expressions.InvocationExpression,System.Dynamic.GetMemberBinder@)">
+            <summary>
+            Try to retrieve <see cref="T:System.Dynamic.GetMemberBinder"/> from a reduced <see cref="F:System.Linq.Expressions.ExpressionType.Dynamic"/> expression.
+            </summary>
+            <param name="expression">The reduced dynamic expression.</param>
+            <param name="memberBinder">The out binder parameter.</param>
+            <returns>Whether the binder was found.</returns>
         </member>
         <member name="M:NHibernate.Util.ExpressionsHelper.IsVariable(System.Linq.Expressions.Expression,System.String@,System.Object@)">
             <summary>

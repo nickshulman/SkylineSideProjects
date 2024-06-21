@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using CommandLine;
+﻿using CommandLine;
 
 namespace ResourcesOrganizer
 {
@@ -14,9 +9,19 @@ namespace ResourcesOrganizer
     }
 
     [Verb("import")]
-    public class ImportOptions
+    public class ImportOptions : Options
     {
         [Option("tag", Required = true)]
         public string Tag { get; set; }
+    }
+
+    [Verb("exportnew")]
+    public class ExportNew : Options
+    {
+        [Option("oldtag", Required = true)]
+        public string OldTag { get; set; }
+
+        [Option("newtag", Required= true )]
+        public string NewTag { get; set; }
     }
 }

@@ -16,7 +16,6 @@ namespace ResourcesOrganizer.ResourcesModel
         public void Read(string databasePath)
         {
             using var sessionFactory = SessionFactoryFactory.CreateSessionFactory(databasePath, false);
-            ThreadStaticSessionContext
             using var session = sessionFactory.OpenStatelessSession();
 
             Read(session);
@@ -55,7 +54,7 @@ namespace ResourcesOrganizer.ResourcesModel
         {
             using var sessionFactory = SessionFactoryFactory.CreateSessionFactory(path, true);
             using var session = sessionFactory.OpenStatelessSession();
-            session.BeginTransaction();
+            var transaction = session.BeginTransaction();
             var invariantResources = SaveInvariantResources(session);
             SaveLocalizedResources(session, invariantResources);
             foreach (var entry in _resourcesFiles)
@@ -65,6 +64,7 @@ namespace ResourcesOrganizer.ResourcesModel
                     SaveResourcesFile(session, invariantResources, entry.Key, resourceFile);
                 }
             }
+            transaction.Commit();
         }
 
         private Dictionary<InvariantResourceKey, long> SaveInvariantResources(IStatelessSession session)
