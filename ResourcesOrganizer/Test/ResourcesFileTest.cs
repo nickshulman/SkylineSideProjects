@@ -10,7 +10,7 @@ namespace Test
         {
             string runDirectory = TestContext.TestRunDirectory!;
             SaveManifestResources(typeof(ResourcesFileTest), runDirectory);
-            var file = ResourcesFile.Read(Path.Combine(runDirectory, "Resources.resx"));
+            var file = ResourcesFile.Read(Path.Combine(runDirectory, "Resources.resx"), "Resources.resx");
             Assert.AreNotEqual(0, file.Entries.Count);
         }
 
@@ -19,7 +19,7 @@ namespace Test
         {
             string runDirectory = TestContext.TestRunDirectory!;
             SaveManifestResources(typeof(ResourcesFileTest), runDirectory);
-            var file = ResourcesFile.Read(Path.Combine(runDirectory, "Resources.resx"));
+            var file = ResourcesFile.Read(Path.Combine(runDirectory, "Resources.resx"), "Resources.resx");
             var resourcesDatabase = new ResourcesDatabase();
             resourcesDatabase.ResourcesFiles.Add("test", file);
             Assert.AreNotEqual(0, resourcesDatabase.GetInvariantResources().Count);

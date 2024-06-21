@@ -8,7 +8,7 @@ namespace ResourcesOrganizer.DataModel
         [Property]
         public long InvariantResourceId { get; set; }
         [Property]
-        public string? FilePath { get; set; }
+        public long ResxFileId { get; set; }
         [Property]
         public int SortIndex { get; set; }
         [Property]

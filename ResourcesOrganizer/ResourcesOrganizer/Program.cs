@@ -1,5 +1,4 @@
-﻿using System.Runtime.Serialization;
-using CommandLine;
+﻿using CommandLine;
 using ResourcesOrganizer.ResourcesModel;
 
 namespace ResourcesOrganizer
@@ -9,11 +8,12 @@ namespace ResourcesOrganizer
         static int Main(string[] args)
         {
             Console.WriteLine("Hello, World!");
-            return Parser.Default.ParseArguments<AddOptions, SubtractOptions, IntersectOptions>(args)
-                .MapResult<AddOptions, SubtractOptions, IntersectOptions, int>(
+            return Parser.Default.ParseArguments<AddOptions, SubtractOptions, IntersectOptions, ExportOptions>(args)
+                .MapResult<AddOptions, SubtractOptions, IntersectOptions, ExportOptions, int>(
                     DoAdd, 
                     DoSubtract,
                     DoIntersect,
+                    DoExport,
                     HandleParseError);
         }
 
@@ -65,7 +65,18 @@ namespace ResourcesOrganizer
                 otherDb.Add(ResourcesDatabase.ReadFile(file));
             }
             database.Intersect(otherDb);
-            database.SaveAtomic(options.DbFile);
+            using var fileSaver = new FileSaver(options.DbFile);
+            database.Save(fileSaver.SafeName);
+            fileSaver.Commit();
+            return 0;
+        }
+
+        static int DoExport(ExportOptions options)
+        {
+            var database = GetDatabase(options);
+            using var fileSaver = new FileSaver(options.OutputFile);
+            database.Export(fileSaver.SafeName);
+            fileSaver.Commit();
             return 0;
         }
 

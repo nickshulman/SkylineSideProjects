@@ -1,4 +1,5 @@
-﻿using NHibernate;
+﻿using System.IO.Compression;
+using NHibernate;
 using ResourcesOrganizer.DataModel;
 
 namespace ResourcesOrganizer.ResourcesModel
@@ -17,7 +18,7 @@ namespace ResourcesOrganizer.ResourcesModel
             }
             else if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
             {
-                var resourcesFile = ResourcesFile.Read(path);
+                var resourcesFile = ResourcesFile.Read(path, path);
                 database.ResourcesFiles.Add(path, resourcesFile);
             }
             else if (Directory.Exists(path))
@@ -41,9 +42,13 @@ namespace ResourcesOrganizer.ResourcesModel
                 .ToDictionary(resource => resource.Id!.Value, resource => resource.GetKey());
             var localizedResources = session.Query<LocalizedResource>()
                 .ToLookup(localizedResource => localizedResource.InvariantResourceId);
-            foreach (var fileGroup in session.Query<ResourceLocation>().GroupBy(location => location.FilePath!))
+            foreach (var fileGroup in session.Query<ResourceLocation>().GroupBy(location => location.ResxFileId))
             {
-                var resourcesFile = new ResourcesFile();
+                var resxFile = session.Get<ResxFile>(fileGroup.Key);
+                var resourcesFile = new ResourcesFile
+                {
+                    XmlContent = resxFile.XmlContent,
+                };
 
                 foreach (var resourceLocation in fileGroup.OrderBy(loc => loc.SortIndex))
                 {
@@ -55,15 +60,15 @@ namespace ResourcesOrganizer.ResourcesModel
                     }
                     resourcesFile.Entries.Add(entry);
                 }
-                ResourcesFiles.Add(fileGroup.Key, resourcesFile);
+                ResourcesFiles.Add(resxFile.FilePath!, resourcesFile);
             }
         }
 
         public void SaveAtomic(string path)
         {
-            var tempFile = Path.GetTempFileName();
-            Save(tempFile);
-            File.Replace(tempFile, path, null);
+            using var fileSaver = new FileSaver(path);
+            Save(fileSaver.SafeName);
+            fileSaver.Commit();
         }
 
         public void Save(string path)
@@ -75,9 +80,39 @@ namespace ResourcesOrganizer.ResourcesModel
             SaveLocalizedResources(session, invariantResources);
             foreach (var resourceFile in ResourcesFiles)
             {
-                SaveResourcesFile(session, invariantResources, resourceFile.Key, resourceFile.Value);
+                var resxFile = new ResxFile
+                {
+                    FilePath = resourceFile.Key,
+                    XmlContent = resourceFile.Value.XmlContent
+                };
+                session.Insert(resxFile);
+
+                SaveResourcesFile(session, invariantResources, resxFile.Id!.Value, resourceFile.Value);
             }
             transaction.Commit();
+        }
+
+        public void Export(string path)
+        {
+            using var stream = File.Create(path);
+            using var zipArchive = new ZipArchive(stream, ZipArchiveMode.Create);
+            foreach (var file in ResourcesFiles)
+            {
+                var entry = zipArchive.CreateEntry(file.Key);
+                using (var entryStream = entry.Open())
+                {
+                    file.Value.ExportResx(entryStream, null);
+                }
+                foreach (var language in file.Value.Entries
+                             .SelectMany(resourceEntry => resourceEntry.LocalizedValues.Keys).Distinct())
+                {
+                    var folder = Path.GetDirectoryName(file.Key) ?? string.Empty;
+                    var fileName = Path.GetFileNameWithoutExtension(file.Key) + "." + language + Path.GetExtension(file.Key);
+                    var localizedEntry = zipArchive.CreateEntry(Path.Combine(folder, fileName));
+                    using var localizedStream = localizedEntry.Open();
+                    file.Value.ExportResx(localizedStream, language);
+                }
+            }
         }
 
         private Dictionary<InvariantResourceKey, long> SaveInvariantResources(IStatelessSession session)
@@ -89,6 +124,7 @@ namespace ResourcesOrganizer.ResourcesModel
                 {
                     Comment = key.Comment,
                     Name = key.Name,
+                    File = key.File,
                     Type = key.Type,
                     Value = key.Value
                 };
@@ -126,14 +162,14 @@ namespace ResourcesOrganizer.ResourcesModel
             }
         }
 
-        private void SaveResourcesFile(IStatelessSession session, Dictionary<InvariantResourceKey, long> invariantResources, string filePath, ResourcesFile resourcesFile)
+        private void SaveResourcesFile(IStatelessSession session, Dictionary<InvariantResourceKey, long> invariantResources, long resxFileId, ResourcesFile resourcesFile)
         {
             int sortIndex = 0;
             foreach (var entry in resourcesFile.Entries)
             {
                 var resourceLocation = new ResourceLocation
                 {
-                    FilePath = filePath,
+                    ResxFileId = resxFileId,
                     InvariantResourceId = invariantResources[entry.Invariant],
                     Name = entry.Name,
                     SortIndex = ++sortIndex,
@@ -145,7 +181,7 @@ namespace ResourcesOrganizer.ResourcesModel
         public List<InvariantResourceKey> GetInvariantResources()
         {
             var invariantResources = ResourcesFiles.Values
-                .SelectMany(resources => resources.Entries.Select(entry => entry.Invariant)).ToList();
+                .SelectMany(resources => resources.Entries.Select(entry => entry.Invariant)).Distinct().ToList();
             invariantResources.Sort();
             return invariantResources;
         }
@@ -209,7 +245,8 @@ namespace ResourcesOrganizer.ResourcesModel
                     continue;
                 }
 
-                var resourcesFile = ResourcesFile.Read(file.FullName);
+                var relativeFileName = Path.Combine(relativePath, file.Name);
+                var resourcesFile = ResourcesFile.Read(file.FullName, relativeFileName);
                 ResourcesFiles[Path.Combine(relativePath, file.Name)] = resourcesFile;
             }
 

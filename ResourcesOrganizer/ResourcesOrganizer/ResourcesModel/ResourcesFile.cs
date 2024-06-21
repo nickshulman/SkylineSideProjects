@@ -4,17 +4,36 @@ namespace ResourcesOrganizer.ResourcesModel
 {
     public class ResourcesFile
     {
-        public readonly List<ResourceEntry> Entries = [];
-        public static ResourcesFile Read(string filePath)
+        public List<ResourceEntry> Entries { get; private set; } = [];
+        public string? XmlContent { get; set; }
+        public static ResourcesFile Read(string filePath, string relativePath)
         {
+            string? fileKey;
+            if (Path.GetFileNameWithoutExtension(relativePath)
+                .EndsWith("Resources", StringComparison.OrdinalIgnoreCase))
+            {
+                fileKey = null;
+            }
+            else
+            {
+                fileKey = relativePath;
+            }
             var resourcesFile = new ResourcesFile();
             var entriesByName = new Dictionary<string, ResourceEntry>();
-            foreach (var element in XDocument.Load(filePath).Root!.Elements("data"))
+            var otherElements = new List<XElement>();
+            var document = XDocument.Load(filePath);
+            foreach (var element in document.Root!.Elements())
             {
+                if (element.Name != "data")
+                {
+                    otherElements.Add(element);
+                    continue;
+                }
                 var key = new InvariantResourceKey
                 {
                     Comment = element.Element("comment")?.Value,
                     Name = (string)element.Attribute("name")!,
+                    File = fileKey,
                     Value = element.Element("value")!.Value,
                     Type = (string?)element.Attribute("type")
                 };
@@ -28,6 +47,11 @@ namespace ResourcesOrganizer.ResourcesModel
                 resourcesFile.Entries.Add(entry);
                 entriesByName.Add(entry.Name, entry);
             }
+            document.Root.RemoveAll();
+            document.Root.Add(otherElements.Cast<object>().ToArray());
+            var stringWriter = new StringWriter();
+            document.Save(stringWriter);
+            resourcesFile.XmlContent = stringWriter.ToString();
 
             var baseName = Path.GetFileNameWithoutExtension(filePath);
             var baseExtension = Path.GetExtension(filePath);
@@ -122,8 +146,8 @@ namespace ResourcesOrganizer.ResourcesModel
 
         public ResourcesFile Clone()
         {
-            var clone = new ResourcesFile();
-            clone.Entries.AddRange(Entries.Select(entry=>entry.Clone()));
+            var clone = (ResourcesFile) MemberwiseClone();
+            clone.Entries = [..Entries.Select(entry => entry.Clone())];
             return clone;
         }
 
@@ -148,6 +172,36 @@ namespace ResourcesOrganizer.ResourcesModel
             }
 
             return true;
+        }
+
+        public void ExportResx(Stream stream, string? language)
+        {
+            var document = XDocument.Load(new StringReader(XmlContent));
+            foreach (var entry in Entries)
+            {
+                string value;
+                if (string.IsNullOrEmpty(language))
+                {
+                    value = entry.Invariant.Value;
+                }
+                else
+                {
+                    if (!entry.LocalizedValues.TryGetValue(language, out value))
+                    {
+                        continue;
+                    }
+                }
+
+                var data = new XElement("data");
+                data.SetAttributeValue("name", entry.Name);
+                data.Add(new XElement("value", value));
+                if (entry.Invariant.Comment != null)
+                {
+                    data.Add(new XElement("comment", entry.Invariant.Comment));
+                }
+                document.Root!.Add(data);
+            }
+            document.Save(stream);
         }
     }
 }

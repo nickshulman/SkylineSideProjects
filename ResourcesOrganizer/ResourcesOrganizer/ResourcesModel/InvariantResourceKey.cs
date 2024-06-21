@@ -3,13 +3,14 @@
     public sealed class InvariantResourceKey : IComparable<InvariantResourceKey>, IComparable
     {
         public string? Name { get; init; }
+        public string? File { get; init; }
         public string? Type { get; init; }
         public string Value { get; init; } = string.Empty;
         public string? Comment { get; init; }
 
         private bool Equals(InvariantResourceKey other)
         {
-            return Name == other.Name && Type == other.Type && Value == other.Value && Comment == other.Comment;
+            return Name == other.Name && File == other.File && Type == other.Type && Value == other.Value && Comment == other.Comment;
         }
 
         public override bool Equals(object? obj)
@@ -19,7 +20,7 @@
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(Name, Type, Value, Comment);
+            return HashCode.Combine(Name, File, Type, Value, Comment);
         }
 
         public int CompareTo(InvariantResourceKey? other)
