@@ -180,6 +180,14 @@ namespace ResourcesOrganizer.ResourcesModel
 
                 var data = new XElement("data");
                 data.SetAttributeValue("name", entry.Name);
+                if (entry.Invariant.Type == null)
+                {
+                    data.SetAttributeValue(XName.Get("space", "http://www.w3.org/XML/1998/namespace"), "preserve");
+                }
+                else
+                {
+                    data.SetAttributeValue("type", entry.Invariant.Type);
+                }
                 data.Add(new XElement("value", value));
                 if (entry.Invariant.Comment != null)
                 {

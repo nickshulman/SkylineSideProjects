@@ -7,7 +7,6 @@ namespace ResourcesOrganizer
     {
         static int Main(string[] args)
         {
-            Console.WriteLine("Hello, World!");
             return Parser.Default.ParseArguments<AddOptions, SubtractOptions, IntersectOptions, ExportOptions>(args)
                 .MapResult<AddOptions, SubtractOptions, IntersectOptions, ExportOptions, int>(
                     DoAdd, 

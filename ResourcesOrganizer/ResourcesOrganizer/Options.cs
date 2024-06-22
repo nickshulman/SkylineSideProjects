@@ -9,31 +9,31 @@ namespace ResourcesOrganizer
 
     }
 
-    [Verb("add")]
-    public class AddOptions : Options
+    public class ImportOptions : Options
     {
-        [Value(0, MetaName = "files", Required = true)]
+        [Value(0, MetaName = "files", Required = true, HelpText = ".resx, directory, or resources.db")]
         public IEnumerable<string> Files { get; set; }
     }
 
-    [Verb("subtract")]
-    public class SubtractOptions : Options
+    [Verb("add", HelpText = "Adds resources to a database")]
+    public class AddOptions : ImportOptions
     {
-        [Value(0, MetaName = "files", Required = true)]
-        public IEnumerable<string> Files { get; set; }
     }
 
-    [Verb("intersect")]
-    public class IntersectOptions : Options
+    [Verb("subtract", HelpText = "Removes resources from a database")]
+    public class SubtractOptions : ImportOptions
     {
-        [Value(0, MetaName = "files", Required = true)]
-        public IEnumerable<string> Files { get; set; }
     }
 
-    [Verb("export")]
+    [Verb("intersect", HelpText = "Removes resources from a database except")]
+    public class IntersectOptions : ImportOptions
+    {
+    }
+
+    [Verb("export", HelpText = "Export .resx files to a .zip")]
     public class ExportOptions : Options
     {
-        [Option("output", Default="resources.zip")]
-        public String OutputFile { get; set; }
+        [Value(0, MetaName = "output", Default="resources.zip")]
+        public string OutputFile { get; set; }
     }
 }
