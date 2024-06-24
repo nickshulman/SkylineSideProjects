@@ -27,8 +27,8 @@ namespace ResourcesOrganizer
     {
         [Value(0, MetaName = "oldDb", Required = true)]
         public string OldDb { get; set; }
-        [Option("languages", HelpText = "Comma separated list of languages")]
-        public string? Languages { get; set; }
+        [Option("language", HelpText = "Comma separated list of languages")]
+        public IEnumerable<string> Language { get; set; }
         [Option("output")]
         public string? Output { get; set; }
 

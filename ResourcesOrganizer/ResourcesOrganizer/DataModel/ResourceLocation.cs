@@ -12,6 +12,8 @@ namespace ResourcesOrganizer.DataModel
         [Property]
         public int SortIndex { get; set; }
         [Property]
+        public int Position { get; set; }
+        [Property]
         public string? Name { get; set; }
     }
 }

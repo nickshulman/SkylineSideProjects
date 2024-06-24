@@ -12,6 +12,8 @@ namespace ResourcesOrganizer.DataModel
         [Property]
         public string? Value { get; set; }
         [Property]
-        public string? Comment { get; set; }
+        public string? Problem { get; set; }
+        [Property]
+        public string? OriginalInvariantValue { get; set; }
     }
 }

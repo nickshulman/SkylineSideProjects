@@ -11,7 +11,8 @@ namespace ResourcesOrganizer.ResourcesModel
         public static readonly XmlWriterSettings XmlWriterSettings = new XmlWriterSettings()
         {
             Indent = true,
-            Encoding = new UTF8Encoding(false, true)
+            Encoding = new UTF8Encoding(false, true),
+            
         };
         public static readonly XName XmlSpace = XName.Get("space", "http://www.w3.org/XML/1998/namespace");
         public ImmutableList<ResourceEntry> Entries { get; init; } = [];
@@ -24,17 +25,12 @@ namespace ResourcesOrganizer.ResourcesModel
             var document = XDocument.Load(filePath);
             foreach (var node in document.Root!.Nodes())
             {
-                if (!(node is XElement element))
+                if (!(node is XElement element) || element.Name != "data")
                 {
-                    if (node is XComment)
+                    if (PreserveNode(node))
                     {
                         otherNodes.Add(node);
                     }
-                    continue;
-                }
-                if (element.Name != "data")
-                {
-                    otherNodes.Add(element);
                     continue;
                 }
 
@@ -59,7 +55,8 @@ namespace ResourcesOrganizer.ResourcesModel
                     Name = key.Name,
                     Invariant = key,
                     MimeType = mimeType,
-                    XmlSpace = xmlSpace
+                    XmlSpace = xmlSpace,
+                    Position = otherNodes.Count
                 };
                 entriesIndex.Add(entry.Name, entries.Count);
                 entries.Add(entry);
@@ -106,7 +103,7 @@ namespace ResourcesOrganizer.ResourcesModel
                         LocalizedValues = entry.LocalizedValues.SetItem(language,
                             new LocalizedValue
                             {
-                                Value = element.Element("value")!.Value, Problem = element.Element("comment")?.Value
+                                Value = element.Element("value")!.Value
                             })
                     };
                 }
@@ -117,6 +114,16 @@ namespace ResourcesOrganizer.ResourcesModel
                 Entries = ImmutableList.CreateRange(entries),
                 XmlContent = xmlContent
             };
+        }
+
+        public static bool PreserveNode(XNode node)
+        {
+            if (node is XComment)
+            {
+                return true;
+            }
+
+            return node is XElement;
         }
 
         [Pure]
@@ -193,47 +200,53 @@ namespace ResourcesOrganizer.ResourcesModel
         public void ExportResx(Stream stream, string? language)
         {
             var document = XDocument.Load(new StringReader(XmlContent));
-            foreach (var entry in Entries)
+            var newNodes = document.Root!.Nodes().Where(PreserveNode).ToList();
+            foreach (var entryGroup in Entries.GroupBy(entry=>entry.Position).OrderByDescending(group=>group.Key))
             {
-                string? localizedText = null;
-                if (!string.IsNullOrEmpty(language))
+                foreach (var entry in entryGroup.Reverse())
                 {
-                    if (entry.LocalizedValues.TryGetValue(language, out var localizedValue))
+                    string? localizedText = null;
+                    if (!string.IsNullOrEmpty(language))
                     {
-                        if (localizedValue.Problem == null)
+                        if (entry.LocalizedValues.TryGetValue(language, out var localizedValue))
                         {
-                            localizedText = localizedValue.Value;
+                            if (localizedValue.Problem == null)
+                            {
+                                localizedText = localizedValue.Value;
+                            }
                         }
                     }
-                }
 
-                localizedText ??= entry.Invariant.Value;
+                    localizedText ??= entry.Invariant.Value;
 
-                var data = new XElement("data");
-                data.SetAttributeValue("name", entry.Name);
-                if (entry.XmlSpace != null)
-                {
-                    data.SetAttributeValue(XmlSpace, entry.XmlSpace);
-                }
-                data.Add(new XElement("value", localizedText));
-                string? comment = entry.Invariant.Comment;
-                if (comment != null)
-                {
-                    data.Add(new XElement("comment", comment));
-                }
+                    var data = new XElement("data");
+                    data.SetAttributeValue("name", entry.Name);
+                    if (entry.XmlSpace != null)
+                    {
+                        data.SetAttributeValue(XmlSpace, entry.XmlSpace);
+                    }
+                    data.Add(new XElement("value", localizedText));
+                    string? comment = entry.Invariant.Comment;
+                    if (comment != null)
+                    {
+                        data.Add(new XElement("comment", comment));
+                    }
 
-                if (entry.Invariant.Type != null)
-                {
-                    data.SetAttributeValue("type", entry.Invariant.Type);
+                    if (entry.Invariant.Type != null)
+                    {
+                        data.SetAttributeValue("type", entry.Invariant.Type);
+                    }
+                    if (entry.MimeType != null)
+                    {
+                        data.SetAttributeValue("mimetype", entry.MimeType);
+                    }
+
+                    newNodes.Insert(entryGroup.Key, data);
                 }
-                if (entry.MimeType != null)
-                {
-                    data.SetAttributeValue("mimetype", entry.MimeType);
-                }
-                document.Root!.Add(data);
             }
+            document.Root.ReplaceAll(newNodes.Cast<object>().ToArray());
 
-            var xmlWriter = XmlWriter.Create(stream, XmlWriterSettings);
+            using var xmlWriter = XmlWriter.Create(stream, XmlWriterSettings);
             document.Save(xmlWriter);
         }
     }

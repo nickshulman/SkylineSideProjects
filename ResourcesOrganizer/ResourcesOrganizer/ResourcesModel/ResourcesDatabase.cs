@@ -69,7 +69,7 @@ namespace ResourcesOrganizer.ResourcesModel
                         localizedValues.Add(localizedResource.Language!, new LocalizedValue
                         {
                             Value = localizedResource.Value!,
-                            Problem = localizedResource.Comment
+                            Problem = localizedResource.Problem
                         });
                     }
                     var invariantResource = invariantResources[resourceLocation.InvariantResourceId];
@@ -80,6 +80,7 @@ namespace ResourcesOrganizer.ResourcesModel
                         MimeType = invariantResource.MimeType,
                         XmlSpace = invariantResource.XmlSpace,
                         LocalizedValues = localizedValues.ToImmutableDictionary(),
+                        Position = resourceLocation.Position
                     };
                     entries.Add(entry);
                 }
@@ -196,7 +197,8 @@ namespace ResourcesOrganizer.ResourcesModel
                         InvariantResourceId = invariantResourceId,
                         Language = localizedEntryGroup.Key,
                         Value = translations[0].Value,
-                        Comment = translations[0].Problem
+                        Problem = translations[0].Problem,
+                        OriginalInvariantValue = translations[0].OriginalInvariantValue
                     };
                     session.Insert(localizedResource);
                 }
@@ -213,7 +215,8 @@ namespace ResourcesOrganizer.ResourcesModel
                     ResxFileId = resxFileId,
                     InvariantResourceId = invariantResources[entry.Invariant],
                     Name = entry.Name,
-                    SortIndex = ++sortIndex,
+                    SortIndex= ++sortIndex,
+                    Position = entry.Position
                 };
                 session.Insert(resourceLocation);
             }
@@ -269,14 +272,14 @@ namespace ResourcesOrganizer.ResourcesModel
                             continue;
                         }
 
-                        string comment;
+                        string problem;
                         if (oldTranslations.Count > 1)
                         {
-                            comment = LocalizationComments.InconsistentTranslation;
+                            problem = LocalizationComments.InconsistentTranslation;
                         }
                         else if (oldResources[entry.Invariant].Any())
                         {
-                            comment = LocalizationComments.MissingTranslation;
+                            problem = LocalizationComments.MissingTranslation;
                         }
                         else
                         {
@@ -294,7 +297,8 @@ namespace ResourcesOrganizer.ResourcesModel
                                 {
                                     localizedValues.Add(language, new LocalizedValue
                                     {
-                                        Problem = LocalizationComments.EnglishTextUsedToBe + oldEnglishValues[0],
+                                        Problem = LocalizationComments.EnglishTextChanged,
+                                        OriginalInvariantValue = oldEnglishValues[0],
                                         Value = oldFuzzyTranslations[0]
                                     });
                                 }
@@ -303,14 +307,14 @@ namespace ResourcesOrganizer.ResourcesModel
 
                             if (oldEnglishValues.Count == 0)
                             {
-                                comment = LocalizationComments.NewResource;
+                                problem = LocalizationComments.NewResource;
                             }
                             else
                             {
-                                comment = LocalizationComments.MissingTranslation;
+                                problem = LocalizationComments.MissingTranslation;
                             }
                         }
-                        localizedValues.Add(language, new LocalizedValue{Value = string.Empty, Problem = comment});
+                        localizedValues.Add(language, new LocalizedValue{Value = string.Empty, Problem = problem});
                     }
 
                     newEntries.Add(entry with {LocalizedValues = localizedValues.ToImmutableDictionary()});

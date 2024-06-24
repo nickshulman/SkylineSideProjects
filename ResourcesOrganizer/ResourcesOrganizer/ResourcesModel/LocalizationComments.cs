@@ -9,9 +9,8 @@ namespace ResourcesOrganizer.ResourcesModel
     public class LocalizationComments
     {
         public static readonly string NewResource = "New resource";
-        public static readonly string EnglishTextUsedToBe = "English text used to be:";
+        public static readonly string EnglishTextChanged = "English text changed";
         public static readonly string InconsistentTranslation = "Inconsistent translation";
-        public static readonly string NonUniqueResourceName = "Non-unique resource name";
         public static readonly string MissingTranslation = "Missing translation";
     }
 }

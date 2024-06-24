@@ -56,12 +56,8 @@ namespace ResourcesOrganizer
         {
             var database = GetDatabase(verb);
             var otherDb = ResourcesDatabase.ReadDatabase(verb.OldDb);
-            List<string> languages;
-            if (verb.Languages != null)
-            {
-                languages = verb.Languages.Split(',').ToList();
-            }
-            else
+            List<string> languages = verb.Language.ToList();
+            if (languages.Count == 0)
             {
                 languages = otherDb.ResourcesFiles.Values
                     .SelectMany(file => file.Entries.SelectMany(entry => entry.LocalizedValues.Keys)).Distinct()
