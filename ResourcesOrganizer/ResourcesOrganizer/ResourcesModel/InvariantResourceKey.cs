@@ -3,14 +3,13 @@
     public sealed record InvariantResourceKey : IComparable<InvariantResourceKey>, IComparable
     {
         public string? Name { get; init; }
-        public string? File { get; init; }
         public string? Type { get; init; }
         public string Value { get; init; } = string.Empty;
         public string? Comment { get; init; }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(Name, File, Type, Value, Comment);
+            return HashCode.Combine(Name, Type, Value, Comment);
         }
 
         public int CompareTo(InvariantResourceKey? other)
@@ -21,8 +20,6 @@
             if (nameComparison != 0) return nameComparison;
             var commentComparison = string.Compare(Comment, other.Comment, StringComparison.OrdinalIgnoreCase);
             if (commentComparison != 0) return commentComparison;
-            var fileComparison = string.Compare(File, other.File, StringComparison.OrdinalIgnoreCase);
-            if (fileComparison != 0) return fileComparison;
             var valueComparison = string.Compare(Value, other.Value, StringComparison.OrdinalIgnoreCase);
             if (valueComparison != 0) return valueComparison;
             return string.Compare(Type, other.Type, StringComparison.OrdinalIgnoreCase);
@@ -45,21 +42,18 @@
                 parts.Add($"Name:{Name}");
             }
 
-            if (Type != null)
-            {
-                parts.Add($"Type:{Type}");
-            }
+            parts.Add($"Value:{TextUtil.Quote(Value)}");
 
             if (Comment != null)
             {
                 parts.Add($"Comment:{TextUtil.Quote(Comment)}");
             }
 
-            if (File != null)
+            if (Type != null)
             {
-                parts.Add($"File:{File}");
+                parts.Add($"Type:{Type}");
             }
-            parts.Add($"Value:{TextUtil.Quote(Value)}");
+
             return string.Join(" ", parts);
         }
     }

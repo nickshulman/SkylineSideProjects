@@ -2,13 +2,11 @@
 
 namespace ResourcesOrganizer.DataModel
 {
-    [Class(Lazy = false)]
+    [Class(Lazy = false, Table="InvariantResource")]
     public class InvariantResource : Entity<InvariantResource>
     {
         [Property]
         public string? Name { get; set; }
-        [Property]
-        public string? File { get; set; }
         [Property]
         public string? Type { get; set; }
         [Property]
@@ -25,7 +23,6 @@ namespace ResourcesOrganizer.DataModel
             return new ResourcesModel.InvariantResourceKey
             {
                 Name = Name,
-                File = File,
                 Type = Type,
                 Value = Value!,
                 Comment = Comment

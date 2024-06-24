@@ -1,43 +1,50 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics.Contracts;
+using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace ResourcesOrganizer.ResourcesModel
 {
     public record ResourcesFile
     {
+        public static readonly XmlWriterSettings XmlWriterSettings = new XmlWriterSettings()
+        {
+            Indent = true,
+            Encoding = new UTF8Encoding(false, true)
+        };
         public static readonly XName XmlSpace = XName.Get("space", "http://www.w3.org/XML/1998/namespace");
         public ImmutableList<ResourceEntry> Entries { get; init; } = [];
         public string XmlContent { get; init; } = string.Empty;
-        public static ResourcesFile Read(string filePath, string relativePath)
+        public static ResourcesFile Read(string filePath)
         {
-            string? fileKey = null;
-            // var filenameWithoutExtension = Path.GetFileNameWithoutExtension(relativePath);
-            // if (filenameWithoutExtension.EndsWith("Resources", StringComparison.OrdinalIgnoreCase)
-            //     || filenameWithoutExtension.EndsWith("Messages", StringComparison.OrdinalIgnoreCase))
-            // {
-            //     fileKey = null;
-            // }
-            // else
-            // {
-            //     fileKey = relativePath;
-            // }
             var entries = new List<ResourceEntry>();
             var entriesIndex = new Dictionary<string, int>();
-            var otherElements = new List<XElement>();
+            var otherNodes = new List<XNode>();
             var document = XDocument.Load(filePath);
-            foreach (var element in document.Root!.Elements())
+            foreach (var node in document.Root!.Nodes())
             {
-                if (element.Name != "data")
+                if (!(node is XElement element))
                 {
-                    otherElements.Add(element);
+                    if (node is XComment)
+                    {
+                        otherNodes.Add(node);
+                    }
                     continue;
                 }
+                if (element.Name != "data")
+                {
+                    otherNodes.Add(element);
+                    continue;
+                }
+
+                string? mimeType = (string?)element.Attribute("mimetype");
+                string? xmlSpace = (string?)element.Attribute(XmlSpace);
+
                 var key = new InvariantResourceKey
                 {
                     Comment = element.Element("comment")?.Value,
                     Name = (string)element.Attribute("name")!,
-                    File = fileKey,
                     Value = element.Element("value")!.Value,
                     Type = (string?)element.Attribute("type")
                 };
@@ -47,16 +54,18 @@ namespace ResourcesOrganizer.ResourcesModel
                     continue;
                 }
 
-                var entry = new ResourceEntry(key.Name, key)
+                var entry = new ResourceEntry
                 {
-                    MimeType = (string?) element.Attribute("mimetype"),
-                    XmlSpace = (string?) element.Attribute(XmlSpace)
+                    Name = key.Name,
+                    Invariant = key,
+                    MimeType = mimeType,
+                    XmlSpace = xmlSpace
                 };
                 entriesIndex.Add(entry.Name, entries.Count);
                 entries.Add(entry);
             }
             document.Root.RemoveAll();
-            document.Root.Add(otherElements.Cast<object>().ToArray());
+            document.Root.Add(otherNodes.Cast<object>().ToArray());
             var stringWriter = new StringWriter();
             document.Save(stringWriter);
             var xmlContent = stringWriter.ToString();
@@ -94,7 +103,11 @@ namespace ResourcesOrganizer.ResourcesModel
                     var entry = entries[entryIndex];
                     entries[entryIndex] = entry with
                     {
-                        LocalizedValues = entry.LocalizedValues.SetItem(language, element.Element("value")!.Value)
+                        LocalizedValues = entry.LocalizedValues.SetItem(language,
+                            new LocalizedValue
+                            {
+                                Value = element.Element("value")!.Value, Problem = element.Element("comment")?.Value
+                            })
                     };
                 }
             }
@@ -182,18 +195,19 @@ namespace ResourcesOrganizer.ResourcesModel
             var document = XDocument.Load(new StringReader(XmlContent));
             foreach (var entry in Entries)
             {
-                string? value;
-                if (string.IsNullOrEmpty(language))
+                string? localizedText = null;
+                if (!string.IsNullOrEmpty(language))
                 {
-                    value = entry.Invariant.Value;
-                }
-                else
-                {
-                    if (!entry.LocalizedValues.TryGetValue(language, out value))
+                    if (entry.LocalizedValues.TryGetValue(language, out var localizedValue))
                     {
-                        continue;
+                        if (localizedValue.Problem == null)
+                        {
+                            localizedText = localizedValue.Value;
+                        }
                     }
                 }
+
+                localizedText ??= entry.Invariant.Value;
 
                 var data = new XElement("data");
                 data.SetAttributeValue("name", entry.Name);
@@ -201,19 +215,26 @@ namespace ResourcesOrganizer.ResourcesModel
                 {
                     data.SetAttributeValue(XmlSpace, entry.XmlSpace);
                 }
-                data.Add(new XElement("value", value));
-                if (entry.Invariant.Comment != null)
+                data.Add(new XElement("value", localizedText));
+                string? comment = entry.Invariant.Comment;
+                if (comment != null)
                 {
-                    data.Add(new XElement("comment", entry.Invariant.Comment));
+                    data.Add(new XElement("comment", comment));
                 }
 
+                if (entry.Invariant.Type != null)
+                {
+                    data.SetAttributeValue("type", entry.Invariant.Type);
+                }
                 if (entry.MimeType != null)
                 {
                     data.SetAttributeValue("mimetype", entry.MimeType);
                 }
                 document.Root!.Add(data);
             }
-            document.Save(stream);
+
+            var xmlWriter = XmlWriter.Create(stream, XmlWriterSettings);
+            document.Save(xmlWriter);
         }
     }
 }

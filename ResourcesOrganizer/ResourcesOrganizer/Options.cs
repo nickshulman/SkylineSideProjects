@@ -6,34 +6,39 @@ namespace ResourcesOrganizer
     {
         [Option("db", Default = "resources.db")]
         public string DbFile { get; set; }
-
-    }
-
-    public class ImportOptions : Options
-    {
-        [Value(0, MetaName = "files", Required = true, HelpText = ".resx, directory, or resources.db")]
-        public IEnumerable<string> Files { get; set; }
     }
 
     [Verb("add", HelpText = "Adds resources to a database")]
-    public class AddOptions : ImportOptions
+    public class AddVerb : Options
     {
+        [Value(0, MetaName = "path", Required = true, HelpText = ".resx, directory, or resources.db")]
+        public IEnumerable<string> Path { get; set; }
+        [Option("exclude")]
+        public IEnumerable<string> Exclude { get; set; }
+        [Option("createnew", Default = false)]
+        public bool CreateNew { get; set; }
+        [Option("output")]
+        public string? Output { get; set; }
+
     }
 
-    [Verb("subtract", HelpText = "Removes resources from a database")]
-    public class SubtractOptions : ImportOptions
+    [Verb("importtranslations")]
+    public class ImportTranslations : Options
     {
-    }
+        [Value(0, MetaName = "oldDb", Required = true)]
+        public string OldDb { get; set; }
+        [Option("languages", HelpText = "Comma separated list of languages")]
+        public string? Languages { get; set; }
+        [Option("output")]
+        public string? Output { get; set; }
 
-    [Verb("intersect", HelpText = "Removes resources from a database except")]
-    public class IntersectOptions : ImportOptions
-    {
     }
 
     [Verb("export", HelpText = "Export .resx files to a .zip")]
-    public class ExportOptions : Options
+    public class ExportVerb : Options
     {
-        [Value(0, MetaName = "output", Default="resources.zip")]
-        public string OutputFile { get; set; }
+        [Value(0, MetaName = "output", Required = true)]
+        public string Output { get; set; }
+
     }
 }

@@ -11,5 +11,7 @@ namespace ResourcesOrganizer.DataModel
         public string? Language { get; set; }
         [Property]
         public string? Value { get; set; }
+        [Property]
+        public string? Comment { get; set; }
     }
 }

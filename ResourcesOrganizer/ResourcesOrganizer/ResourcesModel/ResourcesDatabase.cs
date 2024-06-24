@@ -12,7 +12,7 @@ namespace ResourcesOrganizer.ResourcesModel
         public ImmutableDictionary<string, ResourcesFile> ResourcesFiles { get; init; }
             = ImmutableDictionary<string, ResourcesFile>.Empty;
 
-        public static ResourcesDatabase ReadFile(string path)
+        public static ResourcesDatabase ReadFile(string path, HashSet<string> exclude)
         {
             var extension = Path.GetExtension(path);
             if (extension.Equals(".db", StringComparison.OrdinalIgnoreCase))
@@ -21,7 +21,7 @@ namespace ResourcesOrganizer.ResourcesModel
             }
             if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
             {
-                var resourcesFile = ResourcesFile.Read(path, path);
+                var resourcesFile = ResourcesFile.Read(path);
                 return new ResourcesDatabase
                 {
                     ResourcesFiles = ImmutableDictionary<string, ResourcesFile>.Empty.Add(path, resourcesFile)
@@ -30,7 +30,7 @@ namespace ResourcesOrganizer.ResourcesModel
             if (Directory.Exists(path))
             {
                 var files = new Dictionary<string, ResourcesFile>();
-                AddFolder(files, path, path);
+                AddFolder(files, path, path, exclude);
                 return new ResourcesDatabase
                 {
                     ResourcesFiles = files.ToImmutableDictionary()
@@ -51,7 +51,7 @@ namespace ResourcesOrganizer.ResourcesModel
         public static ResourcesDatabase ReadDatabase(IStatelessSession session)
         {
             var invariantResources = session.Query<InvariantResource>()
-                .ToDictionary(resource => resource.Id!.Value, resource => resource.GetKey());
+                .ToDictionary(resource => resource.Id!.Value);
             var localizedResources = session.Query<LocalizedResource>()
                 .ToLookup(localizedResource => localizedResource.InvariantResourceId);
             var resourcesFiles = new Dictionary<string, ResourcesFile>();
@@ -63,15 +63,23 @@ namespace ResourcesOrganizer.ResourcesModel
                 var entries = new List<ResourceEntry>();
                 foreach (var resourceLocation in fileGroup.OrderBy(loc => loc.SortIndex))
                 {
-                    var localizedValues = new Dictionary<string, string>();
+                    var localizedValues = new Dictionary<string, LocalizedValue>();
                     foreach (var localizedResource in localizedResources[resourceLocation.InvariantResourceId])
                     {
-                        localizedValues.Add(localizedResource.Language!, localizedResource.Value!);
+                        localizedValues.Add(localizedResource.Language!, new LocalizedValue
+                        {
+                            Value = localizedResource.Value!,
+                            Problem = localizedResource.Comment
+                        });
                     }
-                    var entry = new ResourceEntry(resourceLocation.Name!,
-                        invariantResources[resourceLocation.InvariantResourceId])
+                    var invariantResource = invariantResources[resourceLocation.InvariantResourceId];
+                    var entry = new ResourceEntry
                     {
-                        LocalizedValues = localizedValues.ToImmutableDictionary()
+                        Name = resourceLocation.Name!,
+                        Invariant = invariantResource.GetKey(),
+                        MimeType = invariantResource.MimeType,
+                        XmlSpace = invariantResource.XmlSpace,
+                        LocalizedValues = localizedValues.ToImmutableDictionary(),
                     };
                     entries.Add(entry);
                 }
@@ -145,15 +153,19 @@ namespace ResourcesOrganizer.ResourcesModel
             foreach (var group in GetInvariantResources().OrderBy(group=>group.Key))
             {
                 var key = group.Key;
+                var mimeTypes = group.Select(entry => entry.MimeType).Distinct().ToList();
+                mimeTypes.Sort();
+                var xmlSpaces = group.Select(entry => entry.XmlSpace).Distinct().ToList();
+                xmlSpaces.Sort();
+
                 var invariantResource = new InvariantResource
                 {
                     Comment = key.Comment,
                     Name = key.Name,
-                    File = key.File,
                     Type = key.Type,
                     Value = key.Value,
-                    MimeType = group.Select(entry=>entry.MimeType).FirstOrDefault(v=>v != null),
-                    XmlSpace = group.Select(entry=>entry.XmlSpace).FirstOrDefault(v=>v != null)
+                    MimeType = mimeTypes.Last(),
+                    XmlSpace = xmlSpaces.Last()
                 };
 
                 session.Insert(invariantResource);
@@ -176,14 +188,15 @@ namespace ResourcesOrganizer.ResourcesModel
                     var translations = localizedEntryGroup.Select(kvp => kvp.Value).Distinct().ToList();
                     if (translations.Count > 1)
                     {
-                        Console.Error.WriteLine("{0} was translated into {1} as all of the following: {2}", entryGroup.Key, localizedEntryGroup.Key, string.Join(",", translations.Select(TextUtil.Quote)));
+                        Console.Error.WriteLine("{0} was translated into {1} as all of the following: {2}", entryGroup.Key, localizedEntryGroup.Key, string.Join(",", translations.Select(t=>TextUtil.Quote(t.Value))));
                     }
 
                     var localizedResource = new LocalizedResource
                     {
                         InvariantResourceId = invariantResourceId,
                         Language = localizedEntryGroup.Key,
-                        Value = translations[0]
+                        Value = translations[0].Value,
+                        Comment = translations[0].Problem
                     };
                     session.Insert(localizedResource);
                 }
@@ -232,18 +245,78 @@ namespace ResourcesOrganizer.ResourcesModel
         }
 
         [Pure]
-        public ResourcesDatabase Subtract(ResourcesDatabase database)
+        public ResourcesDatabase ImportTranslations(ResourcesDatabase oldDb, IList<string> languages)
         {
-            var keysToRemove = database.ResourcesFiles.Values
-                .SelectMany(file => file.Entries.Select(entry => entry.Invariant)).ToHashSet();
+            var oldResources = oldDb.ResourcesFiles.Values.SelectMany(file => file.Entries)
+                .ToLookup(entry => entry.Invariant);
+            var oldResourcesWithoutText = oldDb.ResourcesFiles.Values.SelectMany(file=>file.Entries)
+                .ToLookup(entry => entry.Invariant with {Value = string.Empty});
             var newFiles = new Dictionary<string, ResourcesFile>();
-            foreach (var entry in ResourcesFiles.ToList())
+            foreach (var resourcesEntry in ResourcesFiles.ToList())
             {
-                var newResourcesFile = entry.Value.Subtract(keysToRemove);
-                if (newResourcesFile.Entries.Count > 0)
+                var newEntries = new List<ResourceEntry>();
+                foreach (var entry in resourcesEntry.Value.Entries)
                 {
-                    newFiles.Add(entry.Key, newResourcesFile);
+                    var localizedValues = new Dictionary<string, LocalizedValue>();
+                    foreach (var language in languages)
+                    {
+                        var oldTranslations = oldResources[entry.Invariant]
+                            .Select(oldEntry => oldEntry.GetTranslation(language)?.Value).OfType<string>().Distinct().ToList();
+
+                        if (oldTranslations.Count == 1)
+                        {
+                            localizedValues.Add(language, new LocalizedValue { Value = oldTranslations.First() });
+                            continue;
+                        }
+
+                        string comment;
+                        if (oldTranslations.Count > 1)
+                        {
+                            comment = LocalizationComments.InconsistentTranslation;
+                        }
+                        else if (oldResources[entry.Invariant].Any())
+                        {
+                            comment = LocalizationComments.MissingTranslation;
+                        }
+                        else
+                        {
+                            var oldFuzzyMatches = oldResourcesWithoutText[
+                                    entry.Invariant with { Value = string.Empty }].ToList();
+                            var oldEnglishValues = oldFuzzyMatches
+                                .Select(oldEntry => oldEntry.Invariant.Value).Distinct().ToList();
+
+                            if (oldEnglishValues.Count == 1)
+                            {
+                                var oldFuzzyTranslations = oldFuzzyMatches
+                                    .Select(oldEntry => oldEntry.GetTranslation(language)?.Value).OfType<string>()
+                                    .Distinct().ToList();
+                                if (oldFuzzyTranslations.Count == 1)
+                                {
+                                    localizedValues.Add(language, new LocalizedValue
+                                    {
+                                        Problem = LocalizationComments.EnglishTextUsedToBe + oldEnglishValues[0],
+                                        Value = oldFuzzyTranslations[0]
+                                    });
+                                }
+                                continue;
+                            }
+
+                            if (oldEnglishValues.Count == 0)
+                            {
+                                comment = LocalizationComments.NewResource;
+                            }
+                            else
+                            {
+                                comment = LocalizationComments.MissingTranslation;
+                            }
+                        }
+                        localizedValues.Add(language, new LocalizedValue{Value = string.Empty, Problem = comment});
+                    }
+
+                    newEntries.Add(entry with {LocalizedValues = localizedValues.ToImmutableDictionary()});
                 }
+                var newResourcesFile = resourcesEntry.Value with {Entries = newEntries.ToImmutableList()};
+                newFiles.Add(resourcesEntry.Key, newResourcesFile);
             }
 
             return this with { ResourcesFiles = newFiles.ToImmutableDictionary() };
@@ -268,8 +341,12 @@ namespace ResourcesOrganizer.ResourcesModel
             return this with { ResourcesFiles = newFiles.ToImmutableDictionary() };
         }
 
-        private static void AddFolder(Dictionary<string, ResourcesFile> files, string fullPath, string relativePath)
+        private static void AddFolder(Dictionary<string, ResourcesFile> files, string fullPath, string relativePath, HashSet<string> exclude)
         {
+            if (exclude.Contains(relativePath))
+            {
+                return;
+            }
             var directoryInfo = new DirectoryInfo(fullPath);
             foreach (var file in directoryInfo.GetFiles())
             {
@@ -278,14 +355,13 @@ namespace ResourcesOrganizer.ResourcesModel
                     continue;
                 }
 
-                var relativeFileName = Path.Combine(relativePath, file.Name);
-                var resourcesFile = ResourcesFile.Read(file.FullName, relativeFileName);
+                var resourcesFile = ResourcesFile.Read(file.FullName);
                 files[Path.Combine(relativePath, file.Name)] = resourcesFile;
             }
 
             foreach (var folder in directoryInfo.GetDirectories())
             {
-                AddFolder(files, folder.FullName, Path.Combine(relativePath, folder.Name));
+                AddFolder(files, folder.FullName, Path.Combine(relativePath, folder.Name), exclude);
             }
         }
     }

@@ -1,7 +1,7 @@
-setlocal
-set ResourcesOrganizerExe=%~dp0..\ResourcesOrganizer\bin\Release\net8.0\ResourcesOrganizer.exe
 REM Syntax used in this batch file:
 REM "~dp0": directory containing the executing batch file
+setlocal
+set ResourcesOrganizerExe=%~dp0..\ResourcesOrganizer\bin\Release\net8.0\ResourcesOrganizer.exe
 pushd v23_1
 %ResourcesOrganizerExe% add --db ..\v23_1.db pwiz_tools
 popd
@@ -15,5 +15,5 @@ copy v24_1.db newstrings.db
 echo .mode csv
 echo .header on
 echo .output newstrings.csv
-type exportstrings.sql
+type %~dp0exportstrings.sql
 ) | sqlite3.exe newstrings.db

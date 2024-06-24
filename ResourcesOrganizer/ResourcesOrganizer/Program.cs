@@ -9,11 +9,10 @@ namespace ResourcesOrganizer
         static int Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
-            return Parser.Default.ParseArguments<AddOptions, SubtractOptions, IntersectOptions, ExportOptions>(args)
-                .MapResult<AddOptions, SubtractOptions, IntersectOptions, ExportOptions, int>(
+            return Parser.Default.ParseArguments<AddVerb, ImportTranslations, ExportVerb>(args)
+                .MapResult<AddVerb, ImportTranslations, ExportVerb, int>(
                     DoAdd, 
-                    DoSubtract,
-                    DoIntersect,
+                    DoImportTranslations,
                     DoExport,
                     HandleParseError);
         }
@@ -32,50 +31,51 @@ namespace ResourcesOrganizer
             return 1;
         }
 
-        static int DoAdd(AddOptions options)
+        static int DoAdd(AddVerb options)
         {
-            var database = GetDatabase(options);
-            foreach (var file in options.Files)
+            ResourcesDatabase database;
+            if (options.CreateNew)
             {
-                var otherDb = ResourcesDatabase.ReadFile(file);
+                database = ResourcesDatabase.EMPTY;
+            }
+            else
+            {
+                database = GetDatabase(options);
+            }
+            var exclude = options.Exclude.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in options.Path)
+            {
+                var otherDb = ResourcesDatabase.ReadFile(file, exclude);
                 database = database.Add(otherDb);
             }
-            database.SaveAtomic(options.DbFile);
+            database.SaveAtomic(options.Output ?? options.DbFile);
             return 0;
         }
 
-        static int DoSubtract(SubtractOptions options)
+        static int DoImportTranslations(ImportTranslations verb)
         {
-            var database = GetDatabase(options);
-            foreach (var file in options.Files)
+            var database = GetDatabase(verb);
+            var otherDb = ResourcesDatabase.ReadDatabase(verb.OldDb);
+            List<string> languages;
+            if (verb.Languages != null)
             {
-                var otherDb = ResourcesDatabase.ReadFile(file);
-                database = database.Subtract(otherDb);
+                languages = verb.Languages.Split(',').ToList();
             }
-            database.SaveAtomic(options.DbFile);
-            return 0;
-
-        }
-
-        static int DoIntersect(IntersectOptions options)
-        {
-            var database = GetDatabase(options);
-            var otherDb = new ResourcesDatabase();
-            foreach (var file in options.Files)
+            else
             {
-                otherDb = otherDb.Add(ResourcesDatabase.ReadFile(file));
+                languages = otherDb.ResourcesFiles.Values
+                    .SelectMany(file => file.Entries.SelectMany(entry => entry.LocalizedValues.Keys)).Distinct()
+                    .ToList();
             }
-            database = database.Intersect(otherDb);
-            using var fileSaver = new FileSaver(options.DbFile);
-            database.Save(fileSaver.SafeName);
-            fileSaver.Commit();
+            database = database.ImportTranslations(otherDb, languages);
+            database.SaveAtomic(verb.Output ?? verb.DbFile);
             return 0;
         }
 
-        static int DoExport(ExportOptions options)
+        static int DoExport(ExportVerb options)
         {
             var database = GetDatabase(options);
-            using var fileSaver = new FileSaver(options.OutputFile);
+            using var fileSaver = new FileSaver(options.Output);
             database.Export(fileSaver.SafeName);
             fileSaver.Commit();
             return 0;
