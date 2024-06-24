@@ -1,22 +1,12 @@
 ﻿namespace ResourcesOrganizer.ResourcesModel
 {
-    public sealed class InvariantResourceKey : IComparable<InvariantResourceKey>, IComparable
+    public sealed record InvariantResourceKey : IComparable<InvariantResourceKey>, IComparable
     {
         public string? Name { get; init; }
         public string? File { get; init; }
         public string? Type { get; init; }
         public string Value { get; init; } = string.Empty;
         public string? Comment { get; init; }
-
-        private bool Equals(InvariantResourceKey other)
-        {
-            return Name == other.Name && File == other.File && Type == other.Type && Value == other.Value && Comment == other.Comment;
-        }
-
-        public override bool Equals(object? obj)
-        {
-            return ReferenceEquals(this, obj) || obj is InvariantResourceKey other && Equals(other);
-        }
 
         public override int GetHashCode()
         {
@@ -31,6 +21,8 @@
             if (nameComparison != 0) return nameComparison;
             var commentComparison = string.Compare(Comment, other.Comment, StringComparison.OrdinalIgnoreCase);
             if (commentComparison != 0) return commentComparison;
+            var fileComparison = string.Compare(File, other.File, StringComparison.OrdinalIgnoreCase);
+            if (fileComparison != 0) return fileComparison;
             var valueComparison = string.Compare(Value, other.Value, StringComparison.OrdinalIgnoreCase);
             if (valueComparison != 0) return valueComparison;
             return string.Compare(Type, other.Type, StringComparison.OrdinalIgnoreCase);
@@ -61,6 +53,11 @@
             if (Comment != null)
             {
                 parts.Add($"Comment:{Comment}");
+            }
+
+            if (File != null)
+            {
+                parts.Add($"File:{File}");
             }
             parts.Add(Value);
             return string.Join(Environment.NewLine, parts);

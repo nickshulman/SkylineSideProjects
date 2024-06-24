@@ -1,4 +1,5 @@
-﻿using ResourcesOrganizer.ResourcesModel;
+﻿using System.Collections.Immutable;
+using ResourcesOrganizer.ResourcesModel;
 
 namespace Test
 {
@@ -20,15 +21,37 @@ namespace Test
             string runDirectory = TestContext.TestRunDirectory!;
             SaveManifestResources(typeof(ResourcesFileTest), runDirectory);
             var file = ResourcesFile.Read(Path.Combine(runDirectory, "Resources.resx"), "Resources.resx");
-            var resourcesDatabase = new ResourcesDatabase();
-            resourcesDatabase.ResourcesFiles.Add("test", file);
-            Assert.AreNotEqual(0, resourcesDatabase.GetInvariantResources().Count);
+            var resourcesDatabase = new ResourcesDatabase
+            {
+                ResourcesFiles = ImmutableDictionary<string, ResourcesFile>.Empty.Add("test", file)
+            };
+            Assert.AreNotEqual(0, resourcesDatabase.GetInvariantResources().Count());
             var dbPath = Path.Combine(runDirectory, "resources.db");
             resourcesDatabase.Save(dbPath);
-            var compare = new ResourcesDatabase();
-            compare.ReadDatabase(dbPath);
-            
-            CollectionAssert.AreEqual(resourcesDatabase.GetInvariantResources(), compare.GetInvariantResources());
+            var compare = ResourcesDatabase.ReadDatabase(dbPath);
+            var expectedInvariantResources =
+                resourcesDatabase.GetInvariantResources().Select(grouping => grouping.Key).ToList();
+            var roundTripInvariantResources = compare.GetInvariantResources().Select(grouping => grouping.Key).ToList();
+            CollectionAssert.AreEqual(expectedInvariantResources, roundTripInvariantResources);
+        }
+
+        [TestMethod]
+        public void TestInvariantKeyFile()
+        {
+            string runDirectory = TestContext.TestRunDirectory!;
+            SaveManifestResources(typeof(ResourcesFileTest), runDirectory);
+            var file = ResourcesFile.Read(Path.Combine(runDirectory, "Skyline.resx"), "Skyline.resx");
+            var resourcesDatabase = ResourcesDatabase.EMPTY with
+            {
+                ResourcesFiles = ImmutableDictionary<string, ResourcesFile>.Empty.Add("test", file)
+            };
+            var dbPath = Path.Combine(runDirectory, "resources.db");
+            resourcesDatabase.Save(dbPath);
+            var compare = ResourcesDatabase.ReadDatabase(dbPath);
+            var expectedInvariantResources =
+                resourcesDatabase.GetInvariantResources().Select(grouping => grouping.Key).ToList();
+            var roundTripInvariantResources = compare.GetInvariantResources().Select(grouping => grouping.Key).ToList();
+            CollectionAssert.AreEqual(expectedInvariantResources, roundTripInvariantResources);
         }
     }
 }

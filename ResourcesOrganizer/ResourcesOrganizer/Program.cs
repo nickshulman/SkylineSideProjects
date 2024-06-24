@@ -36,7 +36,7 @@ namespace ResourcesOrganizer
             foreach (var file in options.Files)
             {
                 var otherDb = ResourcesDatabase.ReadFile(file);
-                database.Add(otherDb);
+                database = database.Add(otherDb);
             }
             database.SaveAtomic(options.DbFile);
             return 0;
@@ -48,7 +48,7 @@ namespace ResourcesOrganizer
             foreach (var file in options.Files)
             {
                 var otherDb = ResourcesDatabase.ReadFile(file);
-                database.Subtract(otherDb);
+                database = database.Subtract(otherDb);
             }
             database.SaveAtomic(options.DbFile);
             return 0;
@@ -61,9 +61,9 @@ namespace ResourcesOrganizer
             var otherDb = new ResourcesDatabase();
             foreach (var file in options.Files)
             {
-                otherDb.Add(ResourcesDatabase.ReadFile(file));
+                otherDb = otherDb.Add(ResourcesDatabase.ReadFile(file));
             }
-            database.Intersect(otherDb);
+            database = database.Intersect(otherDb);
             using var fileSaver = new FileSaver(options.DbFile);
             database.Save(fileSaver.SafeName);
             fileSaver.Commit();
@@ -82,13 +82,11 @@ namespace ResourcesOrganizer
         private static ResourcesDatabase GetDatabase(Options options)
         {
             var path = options.DbFile;
-            var database = new ResourcesDatabase();
             if (File.Exists(path))
             {
-                database.ReadDatabase(path);
+                return ResourcesDatabase.ReadDatabase(path);
             }
-
-            return database;
+            return ResourcesDatabase.EMPTY;
         }
     }
 }

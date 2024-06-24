@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using NHibernate;
 using NHibernate.Cfg;
 using NHibernate.Mapping.Attributes;
@@ -21,8 +16,8 @@ namespace ResourcesOrganizer.DataModel
             var cfg = new Configuration()
                 .SetProperty(@"dialect", typeof(NHibernate.Dialect.SQLiteDialect).AssemblyQualifiedName)
                 .SetProperty(@"connection.connection_string", connectionString)
-                .SetProperty(@"connection.driver_class", typeof(global::NHibernate.Driver.SQLite20Driver).AssemblyQualifiedName)
-                .SetProperty(@"connection.provider", typeof(global::NHibernate.Connection.DriverConnectionProvider).AssemblyQualifiedName);
+                .SetProperty(@"connection.driver_class", typeof(NHibernate.Driver.SQLite20Driver).AssemblyQualifiedName)
+                .SetProperty(@"connection.provider", typeof(NHibernate.Connection.DriverConnectionProvider).AssemblyQualifiedName);
             var hbmSerializer = new HbmSerializer
             {
                 Validate = true

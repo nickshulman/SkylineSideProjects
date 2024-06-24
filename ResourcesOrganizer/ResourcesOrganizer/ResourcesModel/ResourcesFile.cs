@@ -1,11 +1,14 @@
-﻿using System.Xml.Linq;
+﻿using System.Collections.Immutable;
+using System.Diagnostics.Contracts;
+using System.Xml.Linq;
 
 namespace ResourcesOrganizer.ResourcesModel
 {
-    public class ResourcesFile
+    public record ResourcesFile
     {
-        public List<ResourceEntry> Entries { get; private set; } = [];
-        public string? XmlContent { get; set; }
+        public static readonly XName XmlSpace = XName.Get("space", "http://www.w3.org/XML/1998/namespace");
+        public ImmutableList<ResourceEntry> Entries { get; init; } = [];
+        public string XmlContent { get; init; } = string.Empty;
         public static ResourcesFile Read(string filePath, string relativePath)
         {
             string? fileKey;
@@ -18,8 +21,8 @@ namespace ResourcesOrganizer.ResourcesModel
             {
                 fileKey = relativePath;
             }
-            var resourcesFile = new ResourcesFile();
-            var entriesByName = new Dictionary<string, ResourceEntry>();
+            var entries = new List<ResourceEntry>();
+            var entriesIndex = new Dictionary<string, int>();
             var otherElements = new List<XElement>();
             var document = XDocument.Load(filePath);
             foreach (var element in document.Root!.Elements())
@@ -37,21 +40,25 @@ namespace ResourcesOrganizer.ResourcesModel
                     Value = element.Element("value")!.Value,
                     Type = (string?)element.Attribute("type")
                 };
-                if (entriesByName.ContainsKey(key.Name))
+                if (entriesIndex.ContainsKey(key.Name))
                 {
                     Console.Error.WriteLine("Duplicate name {0} in file {1}", key.Name, filePath);
                     continue;
                 }
 
-                var entry = new ResourceEntry(key.Name, key);
-                resourcesFile.Entries.Add(entry);
-                entriesByName.Add(entry.Name, entry);
+                var entry = new ResourceEntry(key.Name, key)
+                {
+                    MimeType = (string?) element.Attribute("mimetype"),
+                    XmlSpace = (string?) element.Attribute(XmlSpace)
+                };
+                entriesIndex.Add(entry.Name, entries.Count);
+                entries.Add(entry);
             }
             document.Root.RemoveAll();
             document.Root.Add(otherElements.Cast<object>().ToArray());
             var stringWriter = new StringWriter();
             document.Save(stringWriter);
-            resourcesFile.XmlContent = stringWriter.ToString();
+            var xmlContent = stringWriter.ToString();
 
             var baseName = Path.GetFileNameWithoutExtension(filePath);
             var baseExtension = Path.GetExtension(filePath);
@@ -78,29 +85,41 @@ namespace ResourcesOrganizer.ResourcesModel
                 foreach (var element in XDocument.Load(file).Root!.Elements("data"))
                 {
                     var name = (string)element.Attribute("name")!;
-                    if (!entriesByName.TryGetValue(name, out var entry))
+                    
+                    if (!entriesIndex.TryGetValue(name, out int entryIndex))
                     {
                         continue;
                     }
-
-                    entry.LocalizedValues[language] = element.Element("value")!.Value;
+                    var entry = entries[entryIndex];
+                    entries[entryIndex] = entry with
+                    {
+                        LocalizedValues = entry.LocalizedValues.SetItem(language, element.Element("value")!.Value)
+                    };
                 }
             }
 
-            return resourcesFile;
+            return new ResourcesFile
+            {
+                Entries = ImmutableList.CreateRange(entries),
+                XmlContent = xmlContent
+            };
         }
 
-        public void Add(ResourcesFile resourcesFile)
+        [Pure]
+        public ResourcesFile Add(ResourcesFile resourcesFile)
         {
+            var entries = Entries.ToList();
+            var entriesIndex = entries.Select(Tuple.Create<ResourceEntry, int>)
+                .ToDictionary(tuple => tuple.Item1.Name, tuple => tuple.Item2);
             foreach (var newEntry in resourcesFile.Entries)
             {
-                var existing = FindEntry(newEntry.Name);
-                if (existing == null)
+                if (!entriesIndex.TryGetValue(newEntry.Name, out var index))
                 {
-                    Entries.Add(newEntry);
+                    entriesIndex.Add(newEntry.Name, entries.Count);
+                    entries.Add(newEntry);
                     continue;
                 }
-
+                var existing = entries[index];
                 if (!Equals(existing.Invariant, newEntry.Invariant))
                 {
                     continue;
@@ -109,32 +128,29 @@ namespace ResourcesOrganizer.ResourcesModel
                 {
                     if (!existing.LocalizedValues.ContainsKey(localizedValue.Key))
                     {
-                        existing.LocalizedValues.Add(localizedValue.Key, localizedValue.Value);
+                        existing = existing with
+                        {
+                            LocalizedValues = existing.LocalizedValues.Add(localizedValue.Key, localizedValue.Value)
+                        };
                     }
                 }
+
+                entries[index] = existing;
             }
+
+            return this with { Entries = ImmutableList.CreateRange(entries) };
         }
 
-        public void Subtract(HashSet<InvariantResourceKey> keysToRemove)
+        [Pure]
+        public ResourcesFile Subtract(HashSet<InvariantResourceKey> keysToRemove)
         {
-            Entries = [..Entries.Where(entry => !keysToRemove.Contains(entry.Invariant))];
+            return this with { Entries = [..Entries.Where(entry => !keysToRemove.Contains(entry.Invariant))] };
         }
 
-        public void Intersect(HashSet<InvariantResourceKey> keysToKeep)
+        [Pure]
+        public ResourcesFile Intersect(HashSet<InvariantResourceKey> keysToKeep)
         {
-            Entries = [..Entries.Where(entry => keysToKeep.Contains(entry.Invariant))];
-        }
-
-        public ResourceEntry? FindEntry(string name)
-        {
-            return Entries.FirstOrDefault(entry => entry.Name == name);
-        }
-
-        public ResourcesFile Clone()
-        {
-            var clone = (ResourcesFile) MemberwiseClone();
-            clone.Entries = [..Entries.Select(entry => entry.Clone())];
-            return clone;
+            return this with { Entries = [..Entries.Where(entry => keysToKeep.Contains(entry.Invariant))] };
         }
 
         public static bool IsInvariantResourceFile(string path)
@@ -165,7 +181,7 @@ namespace ResourcesOrganizer.ResourcesModel
             var document = XDocument.Load(new StringReader(XmlContent));
             foreach (var entry in Entries)
             {
-                string value;
+                string? value;
                 if (string.IsNullOrEmpty(language))
                 {
                     value = entry.Invariant.Value;
@@ -180,18 +196,19 @@ namespace ResourcesOrganizer.ResourcesModel
 
                 var data = new XElement("data");
                 data.SetAttributeValue("name", entry.Name);
-                if (entry.Invariant.Type == null)
+                if (entry.XmlSpace != null)
                 {
-                    data.SetAttributeValue(XName.Get("space", "http://www.w3.org/XML/1998/namespace"), "preserve");
-                }
-                else
-                {
-                    data.SetAttributeValue("type", entry.Invariant.Type);
+                    data.SetAttributeValue(XmlSpace, entry.XmlSpace);
                 }
                 data.Add(new XElement("value", value));
                 if (entry.Invariant.Comment != null)
                 {
                     data.Add(new XElement("comment", entry.Invariant.Comment));
+                }
+
+                if (entry.MimeType != null)
+                {
+                    data.SetAttributeValue("mimetype", entry.MimeType);
                 }
                 document.Root!.Add(data);
             }

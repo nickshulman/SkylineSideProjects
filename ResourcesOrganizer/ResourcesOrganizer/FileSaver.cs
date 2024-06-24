@@ -17,14 +17,14 @@ namespace ResourcesOrganizer
         {
             RealName = Path.GetFullPath(fileName);
 
-            string dirName = Path.GetDirectoryName(RealName);
+            string dirName = Path.GetDirectoryName(RealName)!;
             string tempName = GetTempFileName(dirName, TEMP_PREFIX);
             // If the directory name is returned, then starting path was bogus.
             if (!Equals(dirName, tempName))
                 SafeName = tempName;
         }
 
-        public string SafeName { get; private set; }
+        public string? SafeName { get; private set; }
 
         public string RealName { get; private set; }
 
@@ -67,7 +67,7 @@ namespace ResourcesOrganizer
         private static string GetBackupFileName(string pathDestination)
         {
             string backupFile = FileSaver.TEMP_PREFIX + Path.GetFileName(pathDestination) + @".bak";
-            string dirName = Path.GetDirectoryName(pathDestination);
+            string dirName = Path.GetDirectoryName(pathDestination)!;
             if (!string.IsNullOrEmpty(dirName))
                 backupFile = Path.Combine(dirName, backupFile);
             // CONSIDER: Handle failure by trying a different name, or use a true temporary name?

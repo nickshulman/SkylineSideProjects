@@ -1,20 +1,14 @@
-﻿namespace ResourcesOrganizer.ResourcesModel
+﻿using System.Collections.Immutable;
+
+namespace ResourcesOrganizer.ResourcesModel
 {
-    public class ResourceEntry(string name, InvariantResourceKey key)
+    public record ResourceEntry(string name, InvariantResourceKey key)
     {
-        public string Name { get; } = name;
-        public InvariantResourceKey Invariant { get; } = key;
-        public Dictionary<string, string> LocalizedValues { get; } = [];
-
-        public ResourceEntry Clone()
-        {
-            var clone = new ResourceEntry(Name, Invariant);
-            foreach (var entry in LocalizedValues)
-            {
-                clone.LocalizedValues.Add(entry.Key, entry.Value);
-            }
-
-            return clone;
-        }
+        public string Name { get; init; } = name;
+        public InvariantResourceKey Invariant { get; init; } = key;
+        public string? MimeType { get; init; }
+        public string? XmlSpace { get; init; }
+        public ImmutableDictionary<string, string> LocalizedValues { get; init; } 
+            = ImmutableDictionary<string, string>.Empty;
     }
 }

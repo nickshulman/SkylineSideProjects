@@ -1,67 +1,92 @@
-﻿using System.IO.Compression;
+﻿using System.Collections.Immutable;
+using System.Diagnostics.Contracts;
+using System.IO.Compression;
 using NHibernate;
 using ResourcesOrganizer.DataModel;
 
 namespace ResourcesOrganizer.ResourcesModel
 {
-    public class ResourcesDatabase
+    public record ResourcesDatabase
     {
-        public Dictionary<string, ResourcesFile> ResourcesFiles { get; }= [];
+        public static readonly ResourcesDatabase EMPTY = new ResourcesDatabase();
+        public ImmutableDictionary<string, ResourcesFile> ResourcesFiles { get; init; }
+            = ImmutableDictionary<string, ResourcesFile>.Empty;
 
         public static ResourcesDatabase ReadFile(string path)
         {
-            var database = new ResourcesDatabase();
+            
             var extension = Path.GetExtension(path);
             if (extension.Equals(".db", StringComparison.OrdinalIgnoreCase))
             {
-                database.ReadDatabase(path);
+                return ReadDatabase(path);
             }
-            else if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
+            if (extension.Equals(".resx", StringComparison.OrdinalIgnoreCase))
             {
                 var resourcesFile = ResourcesFile.Read(path, path);
-                database.ResourcesFiles.Add(path, resourcesFile);
+                return new ResourcesDatabase
+                {
+                    ResourcesFiles = ImmutableDictionary<string, ResourcesFile>.Empty.Add(path, resourcesFile)
+                };
             }
-            else if (Directory.Exists(path))
+            if (Directory.Exists(path))
             {
-                database.AddFolder(path, path);
+                var files = new Dictionary<string, ResourcesFile>();
+                AddFolder(files, path, path);
+                return new ResourcesDatabase
+                {
+                    ResourcesFiles = files.ToImmutableDictionary()
+                };
             }
-            return database;
+
+            throw new ArgumentException("I don't know how to read {0}", path);
         }
 
-        public void ReadDatabase(string databasePath)
+        public static ResourcesDatabase ReadDatabase(string databasePath)
         {
             using var sessionFactory = SessionFactoryFactory.CreateSessionFactory(databasePath, false);
             using var session = sessionFactory.OpenStatelessSession();
 
-            ReadDatabase(session);
+            return ReadDatabase(session);
         }
 
-        public void ReadDatabase(IStatelessSession session)
+        public static ResourcesDatabase ReadDatabase(IStatelessSession session)
         {
             var invariantResources = session.Query<InvariantResource>()
                 .ToDictionary(resource => resource.Id!.Value, resource => resource.GetKey());
             var localizedResources = session.Query<LocalizedResource>()
                 .ToLookup(localizedResource => localizedResource.InvariantResourceId);
+            var resourcesFiles = new Dictionary<string, ResourcesFile>();
             foreach (var fileGroup in session.Query<ResourceLocation>().GroupBy(location => location.ResxFileId))
             {
                 var resxFile = session.Get<ResxFile>(fileGroup.Key);
-                var resourcesFile = new ResourcesFile
-                {
-                    XmlContent = resxFile.XmlContent,
-                };
+                var xmlContent = resxFile.XmlContent!;
 
+                var entries = new List<ResourceEntry>();
                 foreach (var resourceLocation in fileGroup.OrderBy(loc => loc.SortIndex))
                 {
-                    var entry = new ResourceEntry(resourceLocation.Name!,
-                        invariantResources[resourceLocation.InvariantResourceId]);
+                    var localizedValues = new Dictionary<string, string>();
                     foreach (var localizedResource in localizedResources[resourceLocation.InvariantResourceId])
                     {
-                        entry.LocalizedValues.Add(localizedResource.Language!, localizedResource.Value!);
+                        localizedValues.Add(localizedResource.Language!, localizedResource.Value!);
                     }
-                    resourcesFile.Entries.Add(entry);
+                    var entry = new ResourceEntry(resourceLocation.Name!,
+                        invariantResources[resourceLocation.InvariantResourceId])
+                    {
+                        LocalizedValues = localizedValues.ToImmutableDictionary()
+                    };
+                    entries.Add(entry);
                 }
-                ResourcesFiles.Add(resxFile.FilePath!, resourcesFile);
+                resourcesFiles.Add(resxFile.FilePath!, new ResourcesFile
+                {
+                    Entries = entries.ToImmutableList(),
+                    XmlContent = xmlContent
+                });
             }
+
+            return new ResourcesDatabase
+            {
+                ResourcesFiles = resourcesFiles.ToImmutableDictionary()
+            };
         }
 
         public void SaveAtomic(string path)
@@ -118,16 +143,20 @@ namespace ResourcesOrganizer.ResourcesModel
         private Dictionary<InvariantResourceKey, long> SaveInvariantResources(IStatelessSession session)
         {
             var result = new Dictionary<InvariantResourceKey, long>();
-            foreach (var key in GetInvariantResources())
+            foreach (var group in GetInvariantResources().OrderBy(group=>group.Key))
             {
+                var key = group.Key;
                 var invariantResource = new InvariantResource
                 {
                     Comment = key.Comment,
                     Name = key.Name,
                     File = key.File,
                     Type = key.Type,
-                    Value = key.Value
+                    Value = key.Value,
+                    MimeType = group.Select(entry=>entry.MimeType).FirstOrDefault(v=>v != null),
+                    XmlSpace = group.Select(entry=>entry.XmlSpace).FirstOrDefault(v=>v != null)
                 };
+
                 session.Insert(invariantResource);
                 result.Add(key, invariantResource.Id!.Value);
             }
@@ -178,58 +207,69 @@ namespace ResourcesOrganizer.ResourcesModel
             }
         }
 
-        public List<InvariantResourceKey> GetInvariantResources()
+        public IEnumerable<IGrouping<InvariantResourceKey, ResourceEntry>> GetInvariantResources()
         {
-            var invariantResources = ResourcesFiles.Values
-                .SelectMany(resources => resources.Entries.Select(entry => entry.Invariant)).Distinct().ToList();
-            invariantResources.Sort();
-            return invariantResources;
+            return ResourcesFiles.Values.SelectMany(resources => resources.Entries).GroupBy(entry => entry.Invariant);
         }
 
-        public void Add(ResourcesDatabase database)
+        [Pure]
+        public ResourcesDatabase Add(ResourcesDatabase database)
         {
+            var resourcesFiles = ResourcesFiles.ToDictionary();
+
             foreach (var resourcesFile in database.ResourcesFiles)
             {
-                if (ResourcesFiles.TryGetValue(resourcesFile.Key, out var existing))
+                if (resourcesFiles.TryGetValue(resourcesFile.Key, out var existing))
                 {
-                    existing.Add(resourcesFile.Value);
+                    resourcesFiles[resourcesFile.Key] = existing.Add(resourcesFile.Value);
                 }
                 else
                 {
-                    ResourcesFiles.Add(resourcesFile.Key, resourcesFile.Value.Clone());
+                    resourcesFiles.Add(resourcesFile.Key, resourcesFile.Value);
                 }
             }
+
+            return this with { ResourcesFiles = resourcesFiles.ToImmutableDictionary() };
         }
 
-        public void Subtract(ResourcesDatabase database)
+        [Pure]
+        public ResourcesDatabase Subtract(ResourcesDatabase database)
         {
             var keysToRemove = database.ResourcesFiles.Values
                 .SelectMany(file => file.Entries.Select(entry => entry.Invariant)).ToHashSet();
+            var newFiles = new Dictionary<string, ResourcesFile>();
             foreach (var entry in ResourcesFiles.ToList())
             {
-                entry.Value.Subtract(keysToRemove);
-                if (entry.Value.Entries.Count == 0)
+                var newResourcesFile = entry.Value.Subtract(keysToRemove);
+                if (newResourcesFile.Entries.Count > 0)
                 {
-                    ResourcesFiles.Remove(entry.Key);
+                    newFiles.Add(entry.Key, newResourcesFile);
                 }
             }
+
+            return this with { ResourcesFiles = newFiles.ToImmutableDictionary() };
         }
 
-        public void Intersect(ResourcesDatabase database)
+        [Pure]
+        public ResourcesDatabase Intersect(ResourcesDatabase database)
         {
             var keysToKeep = database.ResourcesFiles.Values
                 .SelectMany(file => file.Entries.Select(entry => entry.Invariant)).ToHashSet();
+            var newFiles = new Dictionary<string, ResourcesFile>();
             foreach (var entry in ResourcesFiles.ToList())
             {
-                entry.Value.Intersect(keysToKeep);
-                if (entry.Value.Entries.Count == 0)
+                var newFile = entry.Value.Intersect(keysToKeep);
+                
+                if (newFile.Entries.Count > 0)
                 {
-                    ResourcesFiles.Remove(entry.Key);
+                    newFiles.Add(entry.Key, newFile);
                 }
             }
+
+            return this with { ResourcesFiles = newFiles.ToImmutableDictionary() };
         }
 
-        public void AddFolder(string fullPath, string relativePath)
+        private static void AddFolder(Dictionary<string, ResourcesFile> files, string fullPath, string relativePath)
         {
             var directoryInfo = new DirectoryInfo(fullPath);
             foreach (var file in directoryInfo.GetFiles())
@@ -241,12 +281,12 @@ namespace ResourcesOrganizer.ResourcesModel
 
                 var relativeFileName = Path.Combine(relativePath, file.Name);
                 var resourcesFile = ResourcesFile.Read(file.FullName, relativeFileName);
-                ResourcesFiles[Path.Combine(relativePath, file.Name)] = resourcesFile;
+                files[Path.Combine(relativePath, file.Name)] = resourcesFile;
             }
 
             foreach (var folder in directoryInfo.GetDirectories())
             {
-                AddFolder(folder.FullName, Path.Combine(relativePath, folder.Name));
+                AddFolder(files, folder.FullName, Path.Combine(relativePath, folder.Name));
             }
         }
     }

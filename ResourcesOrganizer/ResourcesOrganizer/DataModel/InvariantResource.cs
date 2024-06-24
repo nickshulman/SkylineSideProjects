@@ -15,14 +15,19 @@ namespace ResourcesOrganizer.DataModel
         public string? Value { get; set; }
         [Property]
         public string? Comment { get; set; }
+        [Property]
+        public string? MimeType { get; set; }
+        [Property]
+        public string? XmlSpace { get; set; }
 
         public ResourcesModel.InvariantResourceKey GetKey()
         {
             return new ResourcesModel.InvariantResourceKey
             {
                 Name = Name,
+                File = File,
                 Type = Type,
-                Value = Value,
+                Value = Value!,
                 Comment = Comment
             };
         }
