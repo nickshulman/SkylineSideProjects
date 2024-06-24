@@ -11,16 +11,17 @@ namespace ResourcesOrganizer.ResourcesModel
         public string XmlContent { get; init; } = string.Empty;
         public static ResourcesFile Read(string filePath, string relativePath)
         {
-            string? fileKey;
-            if (Path.GetFileNameWithoutExtension(relativePath)
-                .EndsWith("Resources", StringComparison.OrdinalIgnoreCase))
-            {
-                fileKey = null;
-            }
-            else
-            {
-                fileKey = relativePath;
-            }
+            string? fileKey = null;
+            // var filenameWithoutExtension = Path.GetFileNameWithoutExtension(relativePath);
+            // if (filenameWithoutExtension.EndsWith("Resources", StringComparison.OrdinalIgnoreCase)
+            //     || filenameWithoutExtension.EndsWith("Messages", StringComparison.OrdinalIgnoreCase))
+            // {
+            //     fileKey = null;
+            // }
+            // else
+            // {
+            //     fileKey = relativePath;
+            // }
             var entries = new List<ResourceEntry>();
             var entriesIndex = new Dictionary<string, int>();
             var otherElements = new List<XElement>();
@@ -42,7 +43,7 @@ namespace ResourcesOrganizer.ResourcesModel
                 };
                 if (entriesIndex.ContainsKey(key.Name))
                 {
-                    Console.Error.WriteLine("Duplicate name {0} in file {1}", key.Name, filePath);
+//                    Console.Error.WriteLine("Duplicate name {0} in file {1}", key.Name, filePath);
                     continue;
                 }
 

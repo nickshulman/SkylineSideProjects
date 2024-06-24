@@ -1,4 +1,5 @@
-﻿using CommandLine;
+﻿using System.Text;
+using CommandLine;
 using ResourcesOrganizer.ResourcesModel;
 
 namespace ResourcesOrganizer
@@ -7,6 +8,7 @@ namespace ResourcesOrganizer
     {
         static int Main(string[] args)
         {
+            Console.OutputEncoding = Encoding.UTF8;
             return Parser.Default.ParseArguments<AddOptions, SubtractOptions, IntersectOptions, ExportOptions>(args)
                 .MapResult<AddOptions, SubtractOptions, IntersectOptions, ExportOptions, int>(
                     DoAdd, 

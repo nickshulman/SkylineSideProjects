@@ -8,13 +8,12 @@ namespace ResourcesOrganizer.ResourcesModel
 {
     public record ResourcesDatabase
     {
-        public static readonly ResourcesDatabase EMPTY = new ResourcesDatabase();
+        public static readonly ResourcesDatabase EMPTY = new();
         public ImmutableDictionary<string, ResourcesFile> ResourcesFiles { get; init; }
             = ImmutableDictionary<string, ResourcesFile>.Empty;
 
         public static ResourcesDatabase ReadFile(string path)
         {
-            
             var extension = Path.GetExtension(path);
             if (extension.Equals(".db", StringComparison.OrdinalIgnoreCase))
             {
@@ -177,7 +176,7 @@ namespace ResourcesOrganizer.ResourcesModel
                     var translations = localizedEntryGroup.Select(kvp => kvp.Value).Distinct().ToList();
                     if (translations.Count > 1)
                     {
-                        Console.Error.WriteLine("{0} was translated into {1} as all of the following: {2}", entryGroup.Key, localizedEntryGroup.Key, string.Join(Environment.NewLine, translations));
+                        Console.Error.WriteLine("{0} was translated into {1} as all of the following: {2}", entryGroup.Key, localizedEntryGroup.Key, string.Join(",", translations.Select(TextUtil.Quote)));
                     }
 
                     var localizedResource = new LocalizedResource

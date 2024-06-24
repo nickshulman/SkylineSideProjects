@@ -52,15 +52,15 @@
 
             if (Comment != null)
             {
-                parts.Add($"Comment:{Comment}");
+                parts.Add($"Comment:{TextUtil.Quote(Comment)}");
             }
 
             if (File != null)
             {
                 parts.Add($"File:{File}");
             }
-            parts.Add(Value);
-            return string.Join(Environment.NewLine, parts);
+            parts.Add($"Value:{TextUtil.Quote(Value)}");
+            return string.Join(" ", parts);
         }
     }
 }
