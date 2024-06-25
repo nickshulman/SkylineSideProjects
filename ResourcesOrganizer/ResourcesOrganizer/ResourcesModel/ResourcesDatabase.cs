@@ -268,6 +268,16 @@ namespace ResourcesOrganizer.ResourcesModel
 
                         if (oldTranslations.Count == 1)
                         {
+                            var localizedValue = oldTranslations.First();
+                            if (string.IsNullOrEmpty(localizedValue) && !string.IsNullOrEmpty(entry.Invariant.Value))
+                            {
+                                localizedValues.Add(language, new LocalizedValue
+                                {
+                                    Value = entry.Invariant.Value,
+                                    Problem = LocalizationComments.EmptyLocalizedResource
+                                });
+                                continue;
+                            }
                             localizedValues.Add(language, new LocalizedValue { Value = oldTranslations.First() });
                             continue;
                         }
