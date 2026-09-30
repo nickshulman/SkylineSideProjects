@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>RemoteReports</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Patched Parquet.Net 6.1.0 fork, the same way Skyline consumes it (pwiz_tools/Shared/Lib/Parquet/
+       ParquetNet.targets): the NuGet package supplies the dependency graph and runtime assets, we compile
+       against the patched ParquetNet.dll, and after the build the patched bits replace the package's
+       Parquet.dll (the runtime resolves assembly "Parquet" by file name). -->
+  <PropertyGroup>
+    <!-- The maccoss-developers repo is expected to be checked out next to SkylineSideProjects. -->
+    <PatchedParquetNet>$(MSBuildThisFileDirectory)..\..\developers\skylinedev\Parquet.Net6\BinariesForProteoWizard\ParquetNet.dll</PatchedParquetNet>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Parquet.Net" Version="6.1.0" ExcludeAssets="compile" />
+    <PackageReference Include="System.CommandLine" Version="2.0.12" />
+    <Reference Include="Parquet">
+      <HintPath>$(PatchedParquetNet)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <Target Name="OverridePatchedParquetNet" AfterTargets="Build">
+    <Copy SourceFiles="$(PatchedParquetNet)" DestinationFiles="$(OutDir)Parquet.dll" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="OverridePatchedParquetNetOnPublish" AfterTargets="Publish">
+    <Copy SourceFiles="$(PatchedParquetNet)" DestinationFiles="$(PublishDir)Parquet.dll" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Unmodified copy of pwiz_tools/Skyline/ProtocolBuffers/SkylineDocument.proto, used to decode
+       the base64 <transition_data> elements that large documents write instead of <transition>. -->
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.32.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.76.0" PrivateAssets="All" />
+    <Protobuf Include="Protos\SkylineDocument.proto" GrpcServices="None" />
+  </ItemGroup>
+
+</Project>
