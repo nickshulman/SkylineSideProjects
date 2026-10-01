@@ -8,29 +8,25 @@
     <RootNamespace>RemoteReports</RootNamespace>
   </PropertyGroup>
 
-  <!-- Patched Parquet.Net 6.1.0 fork, the same way Skyline consumes it (pwiz_tools/Shared/Lib/Parquet/
-       ParquetNet.targets): the NuGet package supplies the dependency graph and runtime assets, we compile
-       against the patched ParquetNet.dll, and after the build the patched bits replace the package's
-       Parquet.dll (the runtime resolves assembly "Parquet" by file name). -->
-  <PropertyGroup>
-    <!-- Copied from skylinedev/Parquet.Net6/BinariesForProteoWizard in the maccoss-developers repo
-         (master, 76f5f6b); copy it again to pick up later fixes. -->
-    <PatchedParquetNet>$(MSBuildThisFileDirectory)Lib\ParquetNet.dll</PatchedParquetNet>
-  </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Parquet.Net" Version="6.1.0" ExcludeAssets="compile" />
     <PackageReference Include="System.CommandLine" Version="2.0.12" />
-    <Reference Include="Parquet">
-      <HintPath>$(PatchedParquetNet)</HintPath>
-      <Private>false</Private>
-    </Reference>
   </ItemGroup>
-  <Target Name="OverridePatchedParquetNet" AfterTargets="Build">
-    <Copy SourceFiles="$(PatchedParquetNet)" DestinationFiles="$(OutDir)Parquet.dll" SkipUnchangedFiles="true" />
-  </Target>
-  <Target Name="OverridePatchedParquetNetOnPublish" AfterTargets="Publish">
-    <Copy SourceFiles="$(PatchedParquetNet)" DestinationFiles="$(PublishDir)Parquet.dll" SkipUnchangedFiles="true" />
-  </Target>
+
+  <!-- Patched Parquet.Net 6.1.0 fork, built as the assembly PwizParquet so that it can never be confused
+       with the stock Parquet.dll: Lib\PwizParquet.dll is copied from skylinedev/Parquet.Net6/
+       BinariesForProteoWizard in the maccoss-developers repo (branch PwizParquet, c810c66); copy it again to
+       pick up later fixes. Its namespaces are still Parquet.*. It replaces the Parquet.Net package, so the
+       packages it depends on are referenced here instead, as listed in that folder's BUILD.md. -->
+  <ItemGroup>
+    <Reference Include="PwizParquet">
+      <HintPath>$(MSBuildThisFileDirectory)Lib\PwizParquet.dll</HintPath>
+    </Reference>
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />
+    <PackageReference Include="K4os.Compression.LZ4" Version="1.3.8" />
+    <PackageReference Include="Snappier" Version="1.3.1" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
+  </ItemGroup>
 
   <!-- Unmodified copy of pwiz_tools/Skyline/ProtocolBuffers/SkylineDocument.proto, used to decode
        the base64 <transition_data> elements that large documents write instead of <transition>. -->

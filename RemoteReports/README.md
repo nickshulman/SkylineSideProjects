@@ -36,11 +36,12 @@ dotnet publish RemoteReports.csproj -c Release -r osx-arm64 --self-contained -o 
 
 # Portable: a few MB, runs on any platform with the .NET 10 runtime.
 dotnet publish RemoteReports.csproj -c Release -o publish/portable
+
+# Single file: one self-contained executable per platform (plus optional .pdb and .xml files).
+dotnet publish RemoteReports.csproj -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux-x64-single
 ```
 
-Zip the output folder and send that. Do not use `-p:PublishSingleFile=true`: the build replaces
-the NuGet package's `Parquet.dll` with the patched one in `Lib/` after the files are copied, and a
-single-file bundle would contain the unpatched one.
+Zip the output folder and send that, or for a single-file build, just the executable.
 
 ## Writing a report
 
@@ -188,5 +189,5 @@ and writing Parquet each run on their own threads. Writing Parquet takes the mos
 | `ReportDefinition.cs`, `ReportColumns.cs` | `.skyr` parsing and the supported columns. |
 | `ParquetReportWriter.cs` | Writes the rows, one row group at a time. |
 | `RemoteCredentials.cs`, `SkypFile.cs` | Panorama sign-in, and `.skyp` files. |
-| `Lib/ParquetNet.dll` | The patched Parquet.Net 6.1 that Skyline uses, copied from the developers repo (`skylinedev/Parquet.Net6`). |
+| `Lib/PwizParquet.dll` | The patched Parquet.Net 6.1 fork that Skyline uses, built under its own assembly name so it cannot be mixed up with the stock `Parquet.dll`. Copied from the developers repo (`skylinedev/Parquet.Net6/BinariesForProteoWizard`, branch `PwizParquet`); its `BUILD.md` lists the packages it needs, which `RemoteReports.csproj` references in place of `Parquet.Net`. |
 | `Protos/SkylineDocument.proto` | Copied from Skyline, to read the compressed `<transition_data>` that large documents use. |

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <doc>
     <assembly>
-        <name>Parquet</name>
+        <name>PwizParquet</name>
     </assembly>
     <members>
         <member name="T:Parquet.CompressionMethod">
