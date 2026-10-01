@@ -6,17 +6,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>RemoteReports</RootNamespace>
+    <!-- Shown by --version, with the git commit it was built from. -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.12" />
   </ItemGroup>
 
-  <!-- Patched Parquet.Net 6.1.0 fork, built as the assembly PwizParquet so that it can never be confused
-       with the stock Parquet.dll: Lib\PwizParquet.dll is copied from skylinedev/Parquet.Net6/
-       BinariesForProteoWizard in the maccoss-developers repo (branch PwizParquet, c810c66); copy it again to
-       pick up later fixes. Its namespaces are still Parquet.*. It replaces the Parquet.Net package, so the
-       packages it depends on are referenced here instead, as listed in that folder's BUILD.md. -->
+  <!-- Lib\PwizParquet.dll is the patched Parquet.Net 6.1.0 fork that Skyline uses (6.1.0-osprey3), built as
+       the assembly PwizParquet so that it can never be confused with the stock Parquet.dll. Its namespaces
+       are still Parquet.*. It replaces the Parquet.Net package, so the packages it depends on are referenced
+       here instead; keep them in step with the ones it was built against when replacing it. -->
   <ItemGroup>
     <Reference Include="PwizParquet">
       <HintPath>$(MSBuildThisFileDirectory)Lib\PwizParquet.dll</HintPath>

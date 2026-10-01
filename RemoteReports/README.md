@@ -11,12 +11,19 @@ the 4.9 GB compressed `.sky`, and nothing else.
 
 ## Getting it
 
-### A published build
+### Downloading a release
 
-Unzip the build for your platform and run `RemoteReports` (`RemoteReports.exe` on Windows). A
-self-contained build includes .NET; a portable build needs the
-[.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) and is run with
-`dotnet RemoteReports.dll`.
+Releases are on the [Releases page](https://github.com/nickshulman/SkylineSideProjects/releases)
+(tags starting with `RemoteReports-`). Each has:
+
+| File | |
+|---|---|
+| `RemoteReports-<version>-win-x64.exe` | Windows, a single executable that includes .NET. Windows may warn that it is from an unknown publisher: choose "More info", then "Run anyway". |
+| `RemoteReports-<version>-linux-x64` | Linux, a single executable that includes .NET. Make it executable first: `chmod +x RemoteReports-<version>-linux-x64`. |
+| `RemoteReports-<version>-portable.zip` | Any platform with the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0) installed (including macOS). Unzip it and run `dotnet RemoteReports.dll`. |
+
+The examples below write `RemoteReports` for whichever of these you use. `RemoteReports --version`
+shows the version and the git commit it was built from.
 
 ### Building from source
 
@@ -37,11 +44,13 @@ dotnet publish RemoteReports.csproj -c Release -r osx-arm64 --self-contained -o 
 # Portable: a few MB, runs on any platform with the .NET 10 runtime.
 dotnet publish RemoteReports.csproj -c Release -o publish/portable
 
-# Single file: one self-contained executable per platform (plus optional .pdb and .xml files).
-dotnet publish RemoteReports.csproj -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux-x64-single
+# Single file: one self-contained executable per platform (about 40 MB; the .pdb and .xml
+# files written next to it are not needed). This is how the release executables are built.
+dotnet publish RemoteReports.csproj -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o publish/linux-x64-single
 ```
 
-Zip the output folder and send that, or for a single-file build, just the executable.
+Zip the output folder and send that, or for a single-file build, just the executable. The
+version is set in `RemoteReports.csproj`.
 
 ## Writing a report
 
@@ -189,5 +198,5 @@ and writing Parquet each run on their own threads. Writing Parquet takes the mos
 | `ReportDefinition.cs`, `ReportColumns.cs` | `.skyr` parsing and the supported columns. |
 | `ParquetReportWriter.cs` | Writes the rows, one row group at a time. |
 | `RemoteCredentials.cs`, `SkypFile.cs` | Panorama sign-in, and `.skyp` files. |
-| `Lib/PwizParquet.dll` | The patched Parquet.Net 6.1 fork that Skyline uses, built under its own assembly name so it cannot be mixed up with the stock `Parquet.dll`. Copied from the developers repo (`skylinedev/Parquet.Net6/BinariesForProteoWizard`, branch `PwizParquet`); its `BUILD.md` lists the packages it needs, which `RemoteReports.csproj` references in place of `Parquet.Net`. |
+| `Lib/PwizParquet.dll` | The patched Parquet.Net 6.1 fork that Skyline uses, built under its own assembly name so it cannot be mixed up with the stock `Parquet.dll` (with its `.pdb` and `.xml`). `RemoteReports.csproj` references the packages it depends on in place of the `Parquet.Net` package. |
 | `Protos/SkylineDocument.proto` | Copied from Skyline, to read the compressed `<transition_data>` that large documents use. |
