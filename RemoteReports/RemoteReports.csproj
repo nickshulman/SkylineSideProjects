@@ -13,8 +13,9 @@
        against the patched ParquetNet.dll, and after the build the patched bits replace the package's
        Parquet.dll (the runtime resolves assembly "Parquet" by file name). -->
   <PropertyGroup>
-    <!-- The maccoss-developers repo is expected to be checked out next to SkylineSideProjects. -->
-    <PatchedParquetNet>$(MSBuildThisFileDirectory)..\..\developers\skylinedev\Parquet.Net6\BinariesForProteoWizard\ParquetNet.dll</PatchedParquetNet>
+    <!-- Copied from skylinedev/Parquet.Net6/BinariesForProteoWizard in the maccoss-developers repo
+         (master, 76f5f6b); copy it again to pick up later fixes. -->
+    <PatchedParquetNet>$(MSBuildThisFileDirectory)Lib\ParquetNet.dll</PatchedParquetNet>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Parquet.Net" Version="6.1.0" ExcludeAssets="compile" />
