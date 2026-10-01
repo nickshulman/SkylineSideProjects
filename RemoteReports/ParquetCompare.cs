@@ -27,7 +27,7 @@ public static class ParquetCompare
         {
             var e = i < expectedFields.Length ? expectedFields[i] : null;
             var a = i < actualFields.Length ? actualFields[i] : null;
-            if (e?.Name != a?.Name || e?.ClrType != a?.ClrType || e?.IsNullable != a?.IsNullable)
+            if (Describe(e) != Describe(a))
             {
                 Console.WriteLine($"Schema column {i}: expected {Describe(e)}, actual {Describe(a)}");
                 problems++;
@@ -70,7 +70,9 @@ public static class ParquetCompare
     }
 
     private static string Describe(DataField? f) =>
-        f == null ? "<none>" : $"{f.Name} {f.ClrType.Name}{(f.IsNullable ? "?" : "")}";
+        f == null ? "<none>" : $"{f.Name} {f.ClrType.Name}{(f.IsNullable ? "?" : "")}" + (f is DateTimeDataField d
+            ? $" ({d.DateTimeFormat}{(d.Unit is { } unit ? " " + unit : "")}{(d.IsAdjustedToUTC ? " UTC" : "")})"
+            : "");
 
     private static async Task<long> CountRows(ParquetReader reader)
     {
@@ -120,7 +122,9 @@ public static class ParquetCompare
         if (t == typeof(int)) return await Read<int>(rowGroup, field, n, v => v.ToString(CultureInfo.InvariantCulture));
         if (t == typeof(long)) return await Read<long>(rowGroup, field, n, v => v.ToString(CultureInfo.InvariantCulture));
         if (t == typeof(bool)) return await Read<bool>(rowGroup, field, n, v => v.ToString());
-        if (t == typeof(DateTime)) return await Read<DateTime>(rowGroup, field, n, v => v.ToString("o", CultureInfo.InvariantCulture));
+        // Just the stored digits: the reader sets Kind from the column's encoding (Local for a TIMESTAMP
+        // not adjusted to UTC), which the schema comparison already covers.
+        if (t == typeof(DateTime)) return await Read<DateTime>(rowGroup, field, n, v => v.ToString("yyyy-MM-ddTHH:mm:ss.fffffff", CultureInfo.InvariantCulture));
         throw new NotSupportedException($"Column {field.Name} has unsupported type {field.ClrType}");
     }
 

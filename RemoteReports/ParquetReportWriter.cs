@@ -6,8 +6,10 @@ namespace RemoteReports;
 
 /// <summary>
 /// Writes <see cref="ReportRow"/>s to Parquet in the same shape Skyline's own report exporter produces:
-/// invariant column names, every column OPTIONAL, DateTime as INT96, Zstd.
+/// invariant column names, every column OPTIONAL, DateTime as TIMESTAMP(MILLIS), Zstd.
 /// Rows are buffered only up to one row group, so memory is bounded regardless of document size.
+/// A full row group is encoded and compressed on a background task while the next one fills, so the
+/// caller (and the threads producing rows for it) need not wait for it; that takes two buffers.
 /// </summary>
 public sealed class ParquetReportWriter : IAsyncDisposable
 {
@@ -19,7 +21,10 @@ public sealed class ParquetReportWriter : IAsyncDisposable
 
     private readonly IReadOnlyList<ReportColumn> _columns;
     private readonly ParquetWriter _writer;
-    private readonly ReportRow[] _buffer;
+    private ReportRow[] _buffer;
+    // The buffer of the row group being written by _pendingWrite, and the buffer after that.
+    private ReportRow[] _spareBuffer;
+    private Task _pendingWrite = Task.CompletedTask;
     private int _count;
 
     public long RowsWritten { get; private set; }
@@ -29,6 +34,7 @@ public sealed class ParquetReportWriter : IAsyncDisposable
         _columns = columns;
         _writer = writer;
         _buffer = new ReportRow[rowsPerGroup];
+        _spareBuffer = new ReportRow[rowsPerGroup];
     }
 
     public static async Task<ParquetReportWriter> CreateAsync(Stream output, IReadOnlyList<ReportColumn> columns,
@@ -54,27 +60,43 @@ public sealed class ParquetReportWriter : IAsyncDisposable
     {
         _buffer[_count++] = row;
         if (_count == _buffer.Length)
-            await FlushRowGroupAsync();
+            await StartRowGroupAsync();
     }
 
-    private async Task FlushRowGroupAsync()
+    /// <summary>
+    /// Waits for the previous row group to be written, then starts writing the buffered rows on a
+    /// background task and switches to the other buffer.
+    /// </summary>
+    private async Task StartRowGroupAsync()
     {
+        await _pendingWrite;
         if (_count == 0)
             return;
+        var rows = _buffer;
+        int count = _count;
+        _pendingWrite = Task.Run(() => WriteRowGroupAsync(rows, count));
+        _buffer = _spareBuffer;
+        _spareBuffer = rows;
+        _count = 0;
+    }
+
+    private async Task WriteRowGroupAsync(ReportRow[] rows, int count)
+    {
         using (var rowGroup = _writer.CreateRowGroup())
         {
             foreach (var column in _columns)
-                await column.WriteAsync(rowGroup, _buffer, _count);
+                await column.WriteAsync(rowGroup, rows, count);
             rowGroup.CompleteValidate();
         }
-        RowsWritten += _count;
-        Array.Clear(_buffer, 0, _count);
-        _count = 0;
+        RowsWritten += count;
+        // Drop the strings so they can be collected before the buffer is reused.
+        Array.Clear(rows, 0, count);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await FlushRowGroupAsync();
+        await StartRowGroupAsync();
+        await _pendingWrite;
         await _writer.DisposeAsync();
     }
 }

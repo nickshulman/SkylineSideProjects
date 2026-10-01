@@ -1,17 +1,36 @@
 using System.CommandLine;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using RemoteReports;
 
 const string sourceDescription =
-    "A local path or http(s) URL (e.g. a Panorama WebDAV link) to a .sky file or a zip containing one. " +
-    "Remote zips are read with HTTP Range requests, fetching only the zip directory and the entry being read. " +
-    "Set LABKEY_API_KEY for non-public folders.";
+    "A local path or http(s) URL (e.g. a Panorama WebDAV link) to a .sky file or a zip containing one, " +
+    "or a .skyp file pointing to a .sky.zip on a Panorama server. " +
+    "Remote zips are read with HTTP Range requests, fetching only the zip directory and the entry being read.";
 
 var sourceArgument = new Argument<string>("source") { Description = sourceDescription };
 var entryOption = new Option<string?>("--entry") { Description = "Zip entry to read (default: the first .sky file)" };
+
+// Credentials for non-public folders. Without them, access is anonymous, and a refused request
+// prompts for a username and password when there is a console.
+var usernameOption = new Option<string?>("--username", "-u")
+{
+    Description = "Panorama user (email) for non-public folders; the password is prompted for unless given " +
+                  "with --password. Defaults to LABKEY_USERNAME, or to a .skyp file's DownloadingUser.",
+};
+var passwordOption = new Option<string?>("--password")
+{
+    Description = "Password for --username (visible in the process list and shell history; prefer the prompt " +
+                  "or LABKEY_PASSWORD)",
+};
+var apiKeyOption = new Option<string?>("--api-key")
+{
+    Description = "A LabKey API key, used instead of a username and password. Defaults to LABKEY_API_KEY.",
+};
+Option[] credentialOptions = [usernameOption, passwordOption, apiKeyOption];
 
 // report
 var outputArgument = new Argument<FileInfo>("output") { Description = "The .parquet file to write" };
@@ -30,9 +49,15 @@ var rowsPerGroupOption = new Option<int>("--rows-per-group")
     Description = "Rows buffered and written per Parquet row group",
     DefaultValueFactory = _ => ParquetReportWriter.DefaultRowsPerGroup,
 };
+var threadsOption = new Option<int>("--threads")
+{
+    Description = "Worker threads that turn peptides into report rows (besides the download, XML and Parquet threads). " +
+                  "More than about 4 makes things slower: the XML thread, not the workers, sets the pace.",
+    DefaultValueFactory = _ => Math.Min(4, Environment.ProcessorCount),
+};
 var reportCommand = new Command("report", "Stream a Skyline document and write a report as Parquet")
 {
-    sourceArgument, outputArgument, skyrOption, reportNameOption, entryOption, rowsPerGroupOption,
+    sourceArgument, outputArgument, skyrOption, reportNameOption, entryOption, rowsPerGroupOption, threadsOption,
 };
 reportCommand.SetAction(async (parseResult, ct) =>
 {
@@ -42,17 +67,19 @@ reportCommand.SetAction(async (parseResult, ct) =>
         : ReportDefinition.Prism;
     var output = parseResult.GetValue(outputArgument)!;
     int rowsPerGroup = parseResult.GetValue(rowsPerGroupOption);
+    int threads = Math.Max(1, parseResult.GetValue(threadsOption));
 
-    await using var source = await OpenSourceAsync(parseResult.GetValue(sourceArgument)!, ct);
-    await using var skyStream = source.OpenSky(parseResult.GetValue(entryOption));
+    await using var source = await OpenSourceAsync(parseResult, ct);
+    // Downloads (and inflates) on its own thread, ahead of the XML parser.
+    await using var skyStream = new ReadAheadStream(source.OpenSky(parseResult.GetValue(entryOption)));
     await using var outputStream = output.Create();
     var writer = await ParquetReportWriter.CreateAsync(outputStream, report.Columns, rowsPerGroup);
     await using (writer)
     {
-        foreach (var row in SkyDocumentReader.ReadRows(skyStream))
+        await foreach (var rows in SkyDocumentReader.ReadPeptideRowsAsync(skyStream, threads, ct))
         {
-            ct.ThrowIfCancellationRequested();
-            await writer.AddAsync(row);
+            foreach (var row in rows)
+                await writer.AddAsync(row);
         }
     }
     Console.WriteLine($"Wrote {writer.RowsWritten:N0} rows of report '{report.Name}' to {output.FullName}");
@@ -64,7 +91,7 @@ reportCommand.SetAction(async (parseResult, ct) =>
 var listCommand = new Command("list", "List the entries of a zip") { sourceArgument };
 listCommand.SetAction(async (parseResult, ct) =>
 {
-    await using var source = await OpenSourceAsync(parseResult.GetValue(sourceArgument)!, ct);
+    await using var source = await OpenSourceAsync(parseResult, ct);
     var zip = source.Zip ?? throw new InvalidDataException("The source is not a zip file");
     Console.WriteLine($"{zip.Entries.Count} entries:");
     foreach (var e in zip.Entries)
@@ -78,7 +105,7 @@ var extractOutputOption = new Option<FileInfo>("--out") { Description = "Where t
 var extractCommand = new Command("extract", "Copy one zip entry to a local file") { sourceArgument, entryOption, extractOutputOption };
 extractCommand.SetAction(async (parseResult, ct) =>
 {
-    await using var source = await OpenSourceAsync(parseResult.GetValue(sourceArgument)!, ct);
+    await using var source = await OpenSourceAsync(parseResult, ct);
     var zip = source.Zip ?? throw new InvalidDataException("The source is not a zip file");
     var entry = RemoteSource.FindSkyEntry(zip, parseResult.GetValue(entryOption));
     var output = parseResult.GetValue(extractOutputOption) ?? new FileInfo(Path.GetFileName(entry.FullName));
@@ -101,6 +128,12 @@ var compareCommand = new Command("compare", "Compare two Parquet files column by
 compareCommand.SetAction((parseResult, ct) => ParquetCompare.RunAsync(
     parseResult.GetValue(expectedArgument)!.FullName, parseResult.GetValue(actualArgument)!.FullName));
 
+foreach (var command in new[] { reportCommand, listCommand, extractCommand })
+{
+    foreach (var option in credentialOptions)
+        command.Options.Add(option);
+}
+
 var root = new RootCommand("Writes Parquet reports from Skyline documents, locally or on a WebDAV server")
 {
     reportCommand, listCommand, extractCommand, compareCommand,
@@ -112,32 +145,61 @@ try
     return await root.Parse(args).InvokeAsync(new InvocationConfiguration { EnableDefaultExceptionHandler = false });
 }
 catch (Exception e) when (e is ReportDefinitionException or InvalidDataException or FileNotFoundException
-                              or HttpRequestException or IOException)
+                              or HttpRequestException or IOException or System.Xml.XmlException)
 {
     Console.Error.WriteLine("Error: " + e.Message);
     return 1;
 }
 
-static async Task<RemoteSource> OpenSourceAsync(string path, CancellationToken ct)
+async Task<RemoteSource> OpenSourceAsync(ParseResult parseResult, CancellationToken ct)
 {
-    Stream stream;
-    if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+    string path = parseResult.GetValue(sourceArgument)!;
+    SkypFile? skyp = null;
+    Uri? uri = null;
+    if (SkypFile.IsSkypPath(path) && File.Exists(path))
     {
-        var client = new HttpClient();
-        string? apiKey = Environment.GetEnvironmentVariable("LABKEY_API_KEY");
-        if (!string.IsNullOrEmpty(apiKey))
-        {
-            // LabKey accepts an API key as the password for the literal user name "apikey".
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",
-                Convert.ToBase64String(Encoding.UTF8.GetBytes("apikey:" + apiKey)));
-        }
-        stream = await HttpRangeStream.OpenAsync(client, new Uri(path), ct);
+        skyp = SkypFile.Load(path);
+        uri = skyp.SkyZipUri;
     }
-    else
+    else if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
     {
-        stream = File.OpenRead(path);
+        uri = new Uri(path);
     }
+    if (uri == null)
+        return new RemoteSource(File.OpenRead(path));
+
+    var credentials = RemoteCredentials.FromOptions(parseResult.GetValue(apiKeyOption),
+        parseResult.GetValue(usernameOption), parseResult.GetValue(passwordOption));
+    var auth = credentials.GetHeader(skyp?.DownloadingUser);
+    HttpRangeStream stream;
+    try
+    {
+        stream = await OpenRemoteAsync(uri, auth, ct);
+    }
+    catch (HttpRequestException e) when (e.StatusCode == HttpStatusCode.Unauthorized && auth == null
+                                         && RemoteCredentials.PromptForLogin(uri.GetLeftPart(UriPartial.Authority), skyp?.DownloadingUser) is { } login)
+    {
+        stream = await OpenRemoteAsync(uri, login, ct);
+    }
+    catch (HttpRequestException e) when (e.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+    {
+        throw new HttpRequestException(e.Message + Environment.NewLine + (auth == null
+            ? "  This folder may not be public. Sign in with --username (the password is prompted for) or --api-key."
+            : "  Check the username and password (or API key), and that the account can read this folder."), e, e.StatusCode);
+    }
+
+    if (skyp?.FileSize is { } expectedSize && expectedSize != stream.Length)
+        Console.Error.WriteLine($"Warning: the .skyp file says the zip is {expectedSize:N0} bytes, but it is {stream.Length:N0} bytes on the server; it may have been replaced.");
     return new RemoteSource(stream);
+}
+
+static async Task<HttpRangeStream> OpenRemoteAsync(Uri uri, AuthenticationHeaderValue? auth, CancellationToken ct)
+{
+    if (auth != null && uri.Scheme != Uri.UriSchemeHttps)
+        throw new InvalidDataException($"Refusing to send credentials over unencrypted {uri.Scheme}: {uri}");
+    var client = new HttpClient();
+    client.DefaultRequestHeaders.Authorization = auth;
+    return await HttpRangeStream.OpenAsync(client, uri, ct);
 }
 
 /// <summary>An opened source: a .sky stream, or a zip that contains one.</summary>
@@ -186,7 +248,9 @@ sealed class RemoteSource : IAsyncDisposable
     {
         Console.WriteLine(_stream is HttpRangeStream remote
             ? $"{remote.RequestCount} requests, {remote.BytesFetched:N0} bytes fetched " +
-              $"({100.0 * remote.BytesFetched / remote.Length:F1}% of {remote.Length:N0}), {_stopwatch.Elapsed.TotalSeconds:F1}s"
+              $"({100.0 * remote.BytesFetched / remote.Length:F1}% of {remote.Length:N0}), " +
+              (remote.Reconnects > 0 ? $"{remote.Reconnects} reconnects, " : "") +
+              $"{_stopwatch.Elapsed.TotalSeconds:F1}s"
             : $"{_stopwatch.Elapsed.TotalSeconds:F1}s");
     }
 

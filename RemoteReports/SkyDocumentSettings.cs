@@ -20,15 +20,15 @@ public sealed class SkyDocumentSettings
 
     public StaticMod? FindStaticMod(string name)
     {
-        _staticModsByName ??= StaticMods.GroupBy(m => m.Name).ToDictionary(g => g.Key, g => g.First());
-        return _staticModsByName.GetValueOrDefault(name);
+        // Called from the worker threads: EnsureInitialized publishes a single, fully built dictionary.
+        return LazyInitializer.EnsureInitialized(ref _staticModsByName,
+            () => StaticMods.GroupBy(m => m.Name).ToDictionary(g => g.Key, g => g.First())).GetValueOrDefault(name);
     }
 
     public int FindReplicateIndex(string name)
     {
-        _replicateIndexByName ??= Replicates.Select((r, i) => (r.Name, i))
-            .GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First().i);
-        return _replicateIndexByName.GetValueOrDefault(name, -1);
+        return LazyInitializer.EnsureInitialized(ref _replicateIndexByName, () => Replicates.Select((r, i) => (r.Name, i))
+            .GroupBy(t => t.Name).ToDictionary(g => g.Key, g => g.First().i)).GetValueOrDefault(name, -1);
     }
 
     public static SkyDocumentSettings FromXml(XElement settingsSummary)
