@@ -14,13 +14,15 @@
     <PackageReference Include="System.CommandLine" Version="2.0.12" />
   </ItemGroup>
 
-  <!-- Lib\PwizParquet.dll is the patched Parquet.Net 6.1.0 fork that Skyline uses (6.1.0-osprey3), built as
-       the assembly PwizParquet so that it can never be confused with the stock Parquet.dll. Its namespaces
-       are still Parquet.*. It replaces the Parquet.Net package, so the packages it depends on are referenced
-       here instead; keep them in step with the ones it was built against when replacing it. -->
+  <!-- Lib\Parquet.dll is a byte-identical copy of the patched Parquet.Net 6.1.0 fork (6.1.0-osprey3) that
+       Skyline uses, from pwiz_tools/Shared/Lib/Parquet/Parquet.dll. Skyline references the stock Parquet.Net
+       package and copies this file over the package's Parquet.dll after Build, which dotnet publish and
+       single-file bundles skip. So this project does not reference the Parquet.Net package at all: it
+       references this file, and the packages it depends on are referenced here instead; keep them in step
+       with the ones it was built against when replacing it. -->
   <ItemGroup>
-    <Reference Include="PwizParquet">
-      <HintPath>$(MSBuildThisFileDirectory)Lib\PwizParquet.dll</HintPath>
+    <Reference Include="Parquet">
+      <HintPath>$(MSBuildThisFileDirectory)Lib\Parquet.dll</HintPath>
     </Reference>
     <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.4.2" />
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="3.0.1" />

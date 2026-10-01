@@ -88,14 +88,11 @@ public sealed record SampleFile(string Id, string FileName, double? TicArea, Dat
     /// start as UTC, but Skyline parses it into local time and saves that, so the value is the wall-clock
     /// time in the time zone of the computer that saved the document, which is not recorded. It is kept as
     /// is. Skyline's own export gets the true UTC instant from the .skyd instead, so the two differ by that
-    /// computer's UTC offset. If a time zone is ever present, the value is converted to UTC.
+    /// computer's UTC offset. RoundtripKind gives Unspecified with no zone, Utc for "Z", and Local (already
+    /// converted) for an offset, which <see cref="ReportColumn.Timestamp"/> converts to UTC when it is written.
     /// </summary>
-    private static DateTime ParseAcquiredTime(string value)
-    {
-        var time = DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
-        // RoundtripKind gives Unspecified with no zone, Utc for "Z", and Local (already converted) for an offset.
-        return time.Kind == DateTimeKind.Local ? time.ToUniversalTime() : time;
-    }
+    private static DateTime ParseAcquiredTime(string value) =>
+        DateTime.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
 
     /// <summary>
     /// Mirrors MsDataFileUri.GetFileName: drop "?" URL parameters (lockmass, centroiding) and the

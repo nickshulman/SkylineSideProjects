@@ -6,7 +6,7 @@ namespace RemoteReports;
 
 /// <summary>
 /// Writes <see cref="ReportRow"/>s to Parquet in the same shape Skyline's own report exporter produces:
-/// invariant column names, every column OPTIONAL, DateTime as TIMESTAMP(MILLIS), Zstd.
+/// invariant column names, every column OPTIONAL, DateTime as TIMESTAMP(MILLIS) adjusted to UTC, Zstd.
 /// Rows are buffered only up to one row group, so memory is bounded regardless of document size.
 /// A full row group is encoded and compressed on a background task while the next one fills, so the
 /// caller (and the threads producing rows for it) need not wait for it; that takes two buffers.

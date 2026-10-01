@@ -153,7 +153,9 @@ than produce something different from what Skyline would.
 
 The file is written the way Skyline's own Parquet export writes it: invariant (English) column
 names, every column optional (nullable), Zstd compression, and dictionary encoding for text
-columns. AcquiredTime is a Parquet `TIMESTAMP` in milliseconds with no time zone.
+columns. AcquiredTime is a Parquet `TIMESTAMP` in milliseconds, marked as adjusted to UTC, as Skyline
+writes every date and time column. The `.sky` file does not record a time zone, so the time is
+written as it appears there (see below).
 
 ### Differences from Skyline's export
 
@@ -198,5 +200,5 @@ and writing Parquet each run on their own threads. Writing Parquet takes the mos
 | `ReportDefinition.cs`, `ReportColumns.cs` | `.skyr` parsing and the supported columns. |
 | `ParquetReportWriter.cs` | Writes the rows, one row group at a time. |
 | `RemoteCredentials.cs`, `SkypFile.cs` | Panorama sign-in, and `.skyp` files. |
-| `Lib/PwizParquet.dll` | The patched Parquet.Net 6.1 fork that Skyline uses, built under its own assembly name so it cannot be mixed up with the stock `Parquet.dll` (with its `.pdb` and `.xml`). `RemoteReports.csproj` references the packages it depends on in place of the `Parquet.Net` package. |
+| `Lib/Parquet.dll` | A copy of the patched Parquet.Net 6.1 fork that Skyline uses (`pwiz_tools/Shared/Lib/Parquet/Parquet.dll`), with its `.xml`. `RemoteReports.csproj` references it and the packages it depends on in place of the `Parquet.Net` package, so that publish and single-file builds include it. |
 | `Protos/SkylineDocument.proto` | Copied from Skyline, to read the compressed `<transition_data>` that large documents use. |

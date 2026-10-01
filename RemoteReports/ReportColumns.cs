@@ -56,13 +56,18 @@ public sealed class ReportColumn
     }
 
     /// <summary>
-    /// A wall-clock time with no known time zone, such as AcquiredTime. Like Skyline's
-    /// ParquetReportExporter, writes the TIMESTAMP logical type (not the deprecated INT96) with
-    /// isAdjustedToUTC false and the digits unchanged, stored to the millisecond.
+    /// A DateTime column, written the way Skyline's ParquetReportExporter writes every DateTime: the
+    /// TIMESTAMP logical type (not the deprecated INT96) with isAdjustedToUTC true, stored to the
+    /// millisecond. Parquet.Net writes the digits without looking at DateTime.Kind, so a local time is
+    /// converted to UTC here, and a time with no time zone (DateTimeKind.Unspecified) is written as if
+    /// it were UTC, which keeps the output the same on every computer.
     /// </summary>
-    public static ReportColumn WallClockTime(string propertyPath, string name, RowGetter<DateTime?> getter) =>
-        Of(propertyPath, name, getter,
-            new DateTimeDataField(name, DateTimeFormat.Timestamp, false, DateTimeTimeUnit.Millis, true));
+    public static ReportColumn Timestamp(string propertyPath, string name, RowGetter<DateTime?> getter) =>
+        Of(propertyPath, name, (in ReportRow row) => ToStoredTime(getter(in row)),
+            new DateTimeDataField(name, DateTimeFormat.Timestamp, true, DateTimeTimeUnit.Millis, true));
+
+    private static DateTime? ToStoredTime(DateTime? time) =>
+        time is { Kind: DateTimeKind.Local } local ? local.ToUniversalTime() : time;
 }
 
 /// <summary>
@@ -99,7 +104,7 @@ public static class ReportColumns
         ReportColumn.Str(ResultFile + "Replicate.Name", "ReplicateName", (in r) => r.ReplicateName),
         ReportColumn.Str(ResultFile + "FileName", "FileName", (in r) => r.FileName),
         ReportColumn.Of(ResultFile + "TicArea", "TicArea", (in r) => r.TicArea),
-        ReportColumn.WallClockTime(ResultFile + "AcquiredTime", "AcquiredTime", (in r) => r.AcquiredTime),
+        ReportColumn.Timestamp(ResultFile + "AcquiredTime", "AcquiredTime", (in r) => r.AcquiredTime),
     ];
 
     private static readonly Dictionary<string, ReportColumn> ByPropertyPath = All.ToDictionary(c => c.PropertyPath);
