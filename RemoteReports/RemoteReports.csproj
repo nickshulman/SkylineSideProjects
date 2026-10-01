@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>RemoteReports</RootNamespace>
     <!-- Shown by the version option, with the git commit it was built from. -->
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
